@@ -1,6 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Lib
+import System.IO
 
 main :: IO ()
-main = someFunc
+main = do
+    hSetBuffering stdout NoBuffering
+    hSetBuffering stdin NoBuffering
+    print =<< editItem "One" "Two"
