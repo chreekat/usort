@@ -35,8 +35,9 @@ uSort f = \case
         -- Walking the list a bunch of times here, but compared to waiting
         -- for the user to do each comparison, ... it's pretty
         -- insignificant.
-        e <- uSort f (evens xs)
-        o <- uSort f (odds xs)
+        let (h1, h2) = splitAt (div (length xs) 2) xs
+        e <- uSort f h1
+        o <- uSort f h2
         merge f e o
 
 merge :: Monad m => MonadCompare m a -> [a] -> [a] -> m [a]
@@ -49,16 +50,6 @@ merge f xs' ys' = case (xs', ys') of
         case o of
             LT -> (:) <$> pure x <*> merge f xs ys'
             _  -> (:) <$> pure y <*> merge f xs' ys
-
-evens, odds :: [a] -> [a]
-evens = \case
-    []     -> []
-    (x:xs) -> odds xs
-
-odds = \case
-    []     -> []
-    [x]    -> [x]
-    (x:xs) -> x : evens xs
 
 -- ##
 -- ## operations we permit the user
