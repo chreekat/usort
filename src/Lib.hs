@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 module Lib where
 
@@ -17,16 +16,17 @@ import System.IO
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-type MonadCompare m a = a -> a -> m Ordering
-
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
 uSort ts = evalStateT (sortFunc userCompare ts) []
 
-data Op
+data Undo a = URewrite1 Text
+            | URewrite2 Text
+            | UPickLeft a
+            | UPickRight a
 
-sortFunc :: (MonadIO m, MonadState [Op] m)
+sortFunc :: (MonadIO m, MonadState s m, s ~ [Undo Text])
          => User m [Text]
          -> [Text]
          -> m [Text]
@@ -39,7 +39,7 @@ sortFunc u = \case
         l2 <- sortFunc u h2
         merge u l1 l2
 
-merge :: (MonadIO m, MonadState [Op] m)
+merge :: (MonadIO m, MonadState s m, s ~ [Undo Text])
       => User m [Text]
       -> [Text]
       -> [Text]
@@ -50,7 +50,7 @@ merge u xs ys = case (xs, ys) of
     (xs', []) -> pure xs'
     (x:xs', y:ys') -> eval (x,xs') (y,ys') =<< viewT u
   where
-    eval :: (MonadIO m, MonadState [Op] m)
+    eval :: (MonadIO m, MonadState s m, s ~ [Undo Text])
          => (Text,[Text])
          -> (Text,[Text])
          -> ProgramViewT UserI m [Text]
