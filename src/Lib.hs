@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 module Lib where
 
 import Control.Monad (forever)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Operational
+import Control.Monad.State
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text)
@@ -19,37 +21,54 @@ type MonadCompare m a = a -> a -> m Ordering
 
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
-sortFunc :: [Text] -> IO [Text]
-sortFunc = undefined
+uSort :: [Text] -> IO [Text]
+uSort ts = evalStateT (sortFunc userCompare ts) []
 
--- An undoable, monadic merge.
-umadSort :: Monad m => MonadCompare m a -> [a] -> m [a]
-umadSort = undefined
+data Op
 
--- To start, though, let's not do undos.
-uSort :: Monad m => MonadCompare m a -> [a] -> m [a]
-uSort f = \case
+sortFunc :: (MonadIO m, MonadState [Op] m)
+         => User m [Text]
+         -> [Text]
+         -> m [Text]
+sortFunc u = \case
     []  -> pure []
     [x] -> pure [x]
     xs  -> do
-        -- Walking the list a bunch of times here, but compared to waiting
-        -- for the user to do each comparison, ... it's pretty
-        -- insignificant.
         let (h1, h2) = splitAt (div (length xs) 2) xs
-        e <- uSort f h1
-        o <- uSort f h2
-        merge f e o
+        l1 <- sortFunc u h1
+        l2 <- sortFunc u h2
+        merge u l1 l2
 
-merge :: Monad m => MonadCompare m a -> [a] -> [a] -> m [a]
-merge f xs' ys' = case (xs', ys') of
+merge :: (MonadIO m, MonadState [Op] m)
+      => User m [Text]
+      -> [Text]
+      -> [Text]
+      -> m [Text]
+merge u xs ys = case (xs, ys) of
     ([], []) -> pure []
-    ([], ys) -> pure ys
-    (xs, []) -> pure xs
-    (x:xs, y:ys) -> do
-        o <- f x y
-        case o of
-            LT -> (:) <$> pure x <*> merge f xs ys'
-            _  -> (:) <$> pure y <*> merge f xs' ys
+    ([], ys') -> pure ys'
+    (xs', []) -> pure xs'
+    (x:xs', y:ys') -> eval (x,xs') (y,ys') =<< viewT u
+  where
+    eval :: (MonadIO m, MonadState [Op] m)
+         => (Text,[Text])
+         -> (Text,[Text])
+         -> ProgramViewT UserI m [Text]
+         -> m [Text]
+    eval (x,xs) (y,ys) = \case
+        Return n -> return n
+        GetNextStep :>>= k -> merge (k (88, 66, x, y)) origXs origYs
+        Compare o :>>= k -> case o of
+            LT -> (:) <$> pure x <*> merge (k ()) xs origYs
+            _  -> (:) <$> pure y <*> merge (k ()) origXs ys
+        Rewrite1 x' :>>= k -> merge (k ()) (x':xs) origYs
+        Rewrite2 y' :>>= k -> merge (k ()) origXs (y':ys)
+        -- Just repeat for now
+        Undo :>>= k ->
+            liftIO (putStrLn "Lol nope") >> merge (k ()) origXs origYs
+      where
+        origXs = x:xs
+        origYs = y:ys
 
 -- ##
 -- ## operations we permit the user
@@ -57,25 +76,20 @@ merge f xs' ys' = case (xs', ys') of
 
 data UserI a where
     GetNextStep :: UserI (Int, Int, Text, Text)
-    Compare :: Ordering -> UserI ()
-    Rewrite1 :: Text -> UserI ()
-    Rewrite2 :: Text -> UserI ()
-    Undo :: UserI ()
+    Compare     :: Ordering -> UserI ()
+    Rewrite1    :: Text -> UserI ()
+    Rewrite2    :: Text -> UserI ()
+    Undo        :: UserI ()
 
 type User m a = ProgramT UserI m a
 
 getNextStep = singleton GetNextStep
--- compare' = singleton Compare
 
--- Not sure how to interpret it yet...
--- runSort :: ...
-
-
--- But we know how to use it.
-userCompare :: User IO ()
+-- Here's a "program".
+userCompare :: MonadIO m => User m [Text]
 userCompare = forever (getNextStep >>= doSomething)
   where
-    doSomething :: (Int, Int, Text, Text) -> User IO ()
+    doSomething :: MonadIO m => (Int, Int, Text, Text) -> User m ()
     doSomething v@(rem, est, x, y) = do
         liftIO (printPrompt (rem, est, x, y))
         c <- liftIO getResponse
@@ -97,19 +111,23 @@ editItem x y = do
     putStr "Which item? > "
     c <- getResponse
     case c of
-        '1' -> Left <$> replaceText x
+        '1' -> Left  <$> replaceText x
         '2' -> Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
 replaceText t = do
-    replacement <- runInputT defaultSettings (getInputLineWithInitial "What instead? > " ("", T.unpack t))
+    replacement <-
+        runInputT defaultSettings
+                  (getInputLineWithInitial "What instead? > " ("", T.unpack t))
     return (maybe t T.pack replacement)
 
 printPrompt :: (Int, Int, Text, Text) -> IO ()
 printPrompt (remaining, estimate, x, y) = do
-    T.putStrLn (sformat ("(~" % int % "/" % int % ") Which is more important?") remaining estimate)
+    T.putStrLn (sformat hdrFmt remaining estimate)
     T.putStrLn ("-- (1) " <> x)
     T.putStrLn ("-- (2) " <> y)
     T.putStrLn "-- Or [e]dit an entry"
     T.putStrLn "-- Or [u]ndo last comparison"
     T.putStr "-> "
+  where
+    hdrFmt = "(~" % int % "/" % int % ") Which is more important?"
