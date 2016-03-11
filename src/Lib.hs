@@ -93,44 +93,31 @@ sortFunc u (x :| xs) = case xs of
     [] -> pure (Right (Single x))
     (x':xs')  -> do
         let (left, right) = half x x' xs'
-        maybeL <- sortFunc u left
-        case maybeL of
-            Left ls -> sortFunc u ls
-            Right actsL -> continueWithL u actsL right
+        tryLeft u right =<< sortFunc u left
 
-goRight :: MonadIO m
-              => User m [Text]
-              -> SortTree Text
-              -> NonEmpty Text
-              -> m (Either (NonEmpty Text) (SortTree Text))
-goRight u actsL right = do
-    maybeR <- sortFunc u right
-    case maybeR of
-        Left _ -> do
-            maybeL <- resort u actsL
-            case maybeL of
-                Left left -> sortFunc u (left<>right)
-                Right actsL' -> goRight u actsL' right
-        Right actsR -> do
-            mms <- merge u (toList' actsL) (toList' actsR) id
-            case mms of
-                Nothing -> goRight u actsL (toList' actsR)
-                Just ms -> pure (Right (STree actsL actsR ms))
+tryLeft :: MonadIO m
+        => User m [Text]
+        -> NonEmpty Text
+        -> Either (NonEmpty Text) (SortTree Text)
+        -> m (Either (NonEmpty Text) (SortTree Text))
+tryLeft u right = \case
+    Left left -> sortFunc u (left<>right)
+    Right actsL -> tryRight u actsL =<< sortFunc u right
 
-continueWithR :: MonadIO m
-              => User m [Text]
-              -> SortTree Text
-              -> Either (NonEmpty Text) (SortTree Text)
-              -> m (Either (NonEmpty Text) (SortTree Text))
-continueWithR u actsL neRight = case neRight of
-    Left right -> do
-        maybeL <- resort u actsL
-        case maybeL of
-            Left left -> sortFunc u (left <> right)
-            Right actsL' -> continueWithL u actsL' right
+tryRight :: MonadIO m
+         => User m [Text]
+         -> SortTree Text
+         -> Either (NonEmpty Text) (SortTree Text)
+         -> m (Either (NonEmpty Text) (SortTree Text))
+tryRight u actsL = \case
+    -- Couldn't sort the right half? Try the left half again.
+    Left right -> tryLeft u right =<< resort u actsL
     Right actsR -> do
-        merges <- merge u (toList actsL) (toList actsR) []
-        continueWithBoth u actsL actsR merges
+        mms <- merge u (toList' actsL) (toList' actsR) []
+        case mms of
+            -- Can't merge? Try the right half again.
+            Nothing -> tryRight u actsL =<< resort u actsR
+            Just ms -> pure (Right (STree actsL actsR ms))
 
 resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Either (NonEmpty Text) (SortTree Text))
 resort u = \case
