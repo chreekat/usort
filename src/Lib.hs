@@ -40,25 +40,25 @@ half x x' = \case
     [] -> (x :| [], x' :| [])
     [x''] -> (x :| [], x' :| [x''])
     (z:z':zs) -> let (h,h') = half z z' zs
-                 in (x :| (toList h), x' :| (toList h'))
+                 in (x <| h, x' <| h')
 
-data Merge a = PickLeft a
-             | PickRight a
+data Merge a = PickLeft a (Merge a)
+             | PickRight a (Merge a)
              | SkipLeft (NonEmpty a)
              | SkipRight (NonEmpty a)
              deriving Show
 
 instance ToNonEmpty Merge where
     toList' = \case
-        PickLeft a -> a :| []
-        PickRight a -> a :| []
+        PickLeft a c -> a <| toList' c
+        PickRight a c -> a <| toList' c
         SkipLeft ne -> ne
         SkipRight ne -> ne
 
 instance Foldable Merge where
     foldMap f = \case
-        PickLeft a -> f a
-        PickRight a -> f a
+        PickLeft a c -> f a `mappend` foldMap f c
+        PickRight a c -> f a `mappend` foldMap f c
         SkipLeft (a :| as) -> mconcat (f a : map f as)
         SkipRight (a :| as) -> mconcat (f a : map f as)
 
@@ -67,28 +67,23 @@ data SortTree a
     | STree
         { sortL :: SortTree a
         , sortR :: SortTree a
-        , merges :: NonEmpty (Merge a)
+        , merges :: Merge a
         }
     deriving Show
 
 instance ToNonEmpty SortTree where
     toList' = \case
         Single a -> a :| []
-        STree _ _ (m :| ms) ->
-            let (x :| xs) = toList' m
-                xs' = concatMap toList ms
-            in x :| (xs <> xs')
+        STree _ _ ms -> case ms of
+            PickLeft a c -> a <| toList' c
+            PickRight a c -> a <| toList' c
+            SkipLeft as -> as
+            SkipRight as -> as
 
 instance Foldable SortTree where
     foldMap f = \case
         Single a -> f a
-        STree _ _ ms -> mconcat . map f . concatMap extract . NE.reverse $ ms
-      where
-        extract = \case
-            PickLeft a -> [a]
-            PickRight a -> [a]
-            SkipLeft (a :| as) -> a:as
-            SkipRight (a :| as) -> a:as
+        STree _ _ ms -> foldMap f ms
 
 sortFunc :: (MonadIO m)
          => User m [Text]
@@ -103,12 +98,24 @@ sortFunc u (x :| xs) = case xs of
             Left ls -> sortFunc u ls
             Right actsL -> continueWithL u actsL right
 
-continueWithL :: MonadIO m
+goRight :: MonadIO m
               => User m [Text]
               -> SortTree Text
               -> NonEmpty Text
               -> m (Either (NonEmpty Text) (SortTree Text))
-continueWithL u actsL = continueWithR u actsL <=< sortFunc u
+goRight u actsL right = do
+    maybeR <- sortFunc u right
+    case maybeR of
+        Left _ -> do
+            maybeL <- resort u actsL
+            case maybeL of
+                Left left -> sortFunc u (left<>right)
+                Right actsL' -> goRight u actsL' right
+        Right actsR -> do
+            mms <- merge u (toList' actsL) (toList' actsR) id
+            case mms of
+                Nothing -> goRight u actsL (toList' actsR)
+                Just ms -> pure (Right (STree actsL actsR ms))
 
 continueWithR :: MonadIO m
               => User m [Text]
@@ -147,10 +154,10 @@ continueWithBoth u l r = \case
 
 merge :: (MonadIO m)
       => User m [Text]
-      -> [Text]
-      -> [Text]
+      -> NonEmpty Text
+      -> NonEmpty Text
       -> [Merge Text]
-      -> m [Merge Text]
+      -> m (Maybe (Merge Text))
 merge u xs ys initialActs = case (xs, ys) of
     ([], []) -> pure initialActs
     ([], y:ys') -> pure (SkipRight (y :| ys'):initialActs)
@@ -182,16 +189,20 @@ merge u xs ys initialActs = case (xs, ys) of
         origYs = y:ys
         push as a = Just (a :| []) `mplus` as
 
-undo :: NonEmpty (Merge a) -> [a] -> [a] -> Maybe ([Merge a], [a], [a])
-undo (a :| as) left right = case a of
-    PickLeft x -> Just (as, x:left, right)
-    PickRight x -> Just (as, left, x:right)
-    SkipLeft xs -> case as of
+undo :: Merge a -> [a] -> [a] -> Maybe (Maybe (Merge a), NonEmpty a, NonEmpty a)
+undo a left right = case a of
+    PickLeft x c -> case right of
+        [] -> undo c (x:left) right
+        (r:rs)  -> Just (Just c, x :| left, r :| rs)
+    PickRight x c -> case left of
+        [] -> undo c left (x:right)
+        (l:ls)  -> Just (Just c, l :| ls, x :| right)
+    SkipLeft xs -> case right of
         [] -> Nothing
-        (a':as') -> undo (a' :| as') (toList xs<>left) right
-    SkipRight xs -> case as of
+        (r:rs) -> Just (Nothing, xs, r:|rs)
+    SkipRight xs -> case left of
         [] -> Nothing
-        (a':as') -> undo (a' :| as') left (toList xs<>right)
+        (l:ls) -> Just (Nothing, l:|ls, xs)
 
 -- ##
 -- ## operations we permit the user
@@ -254,3 +265,4 @@ printPrompt (remaining, estimate, x, y) = do
     T.putStr "-> "
   where
     hdrFmt = "(~" % int % "/" % int % ") Which is more important?"
+
