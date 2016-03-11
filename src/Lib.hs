@@ -23,7 +23,9 @@ import qualified Data.Text.IO as T
 -- :D
 uSort :: [Text] -> IO [Text]
 uSort [] = pure []
-uSort (x:xs) = toList . fromSuccess <$> sortFunc userCompare (NE x xs)
+uSort (x:xs) = toList . fromRight <$> sortFunc userCompare (NE x xs)
+
+fromRight (Right x) = x
 
 class ToNonEmpty m where
     toList' :: m a -> NonEmpty a
@@ -96,45 +98,42 @@ instance Foldable SortTree where
             SkipLeft (NE a as) -> a:as
             SkipRight (NE a as) -> a:as
 
-data Sort a = SortSuccess { fromSuccess :: SortTree a }
-            | SortFail (NonEmpty a)
-
 sortFunc :: (MonadIO m)
          => User m [Text]
          -> NonEmpty Text
-         -> m (Sort Text)
+         -> m (Either (NonEmpty Text) (SortTree Text))
 sortFunc u (NE x xs) = case xs of
-    [] -> pure (SortSuccess (Single x))
+    [] -> pure (Right (Single x))
     (x':xs')  -> do
         let (left, right) = half x x' xs'
-        SortSuccess actsL <- sortFunc u left
+        Right actsL <- sortFunc u left
         continueWithL u actsL right
 
 continueWithL :: MonadIO m
               => User m [Text]
               -> SortTree Text
               -> NonEmpty Text
-              -> m (Sort Text)
+              -> m (Either (NonEmpty Text) (SortTree Text))
 continueWithL u actsL = continueWithR u actsL <=< sortFunc u
 
 continueWithR :: MonadIO m
               => User m [Text]
               -> SortTree Text
-              -> Sort Text
-              -> m (Sort Text)
-continueWithR u actsL = \case
-    SortFail right -> do
-        SortSuccess actsL' <- resort u actsL
+              -> Either (NonEmpty Text) (SortTree Text)
+              -> m (Either (NonEmpty Text) (SortTree Text))
+continueWithR u actsL neRight = case neRight of
+    Left right -> do
+        Right actsL' <- resort u actsL
         continueWithL u actsL' right
-    SortSuccess actsR -> do
+    Right actsR -> do
         merges <- merge u (toList actsL) (toList actsR) []
         continueWithBoth u actsL actsR merges
 
-resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Sort Text)
+resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Either (NonEmpty Text) (SortTree Text))
 resort u = \case
-    Single a -> pure (SortFail (NE a []))
+    Single a -> pure (Left (NE a []))
     tree@STree{..} -> case undo merges [] [] of
-        Nothing -> pure (SortFail (toList' tree))
+        Nothing -> pure (Left (toList' tree))
         Just (as', undoneL, undoneR) -> do
             merges <- merge u undoneL undoneR as'
             continueWithBoth u sortL sortR merges
@@ -144,11 +143,11 @@ continueWithBoth :: MonadIO m
                  -> SortTree Text
                  -> SortTree Text
                  -> [Merge Text]
-                 -> m (Sort Text)
+                 -> m (Either (NonEmpty Text) (SortTree Text))
 continueWithBoth u l r = \case
     [] -> continueWithR u l =<< resort u r
     (a:as) ->
-        pure (SortSuccess (STree l r (NE a as)))
+        pure (Right (STree l r (NE a as)))
 
 merge :: (MonadIO m)
       => User m [Text]
