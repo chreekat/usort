@@ -21,7 +21,7 @@ import Debug.Trace
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
-uSort ts = extractActions . actions . fromSuccess <$> sortFunc userCompare ts
+uSort ts = extractActions . fromSuccess <$> sortFunc userCompare ts
 
 data Action a = PickLeft a
               | PickRight a
@@ -30,19 +30,24 @@ data Action a = PickLeft a
               | BaseCase a
               deriving Show
 
-data ActionTree a = ATree
-        { actionsL :: Maybe (ActionTree a)
-        , actionsR :: Maybe (ActionTree a)
+data ActionTree a
+    = Leaf
+    | Base a
+    | ATree
+        { actionsL :: ActionTree a
+        , actionsR :: ActionTree a
         , actions :: [Action a]
         }
-        deriving Show
-noActions = ATree Nothing Nothing []
+    deriving Show
 
 data Sort a = SortSuccess { fromSuccess :: ActionTree a }
             | SortFail [a]
 
-extractActions :: [Action a] -> [a]
-extractActions = concatMap extractAction . reverse
+extractActions :: ActionTree a -> [a]
+extractActions = \case
+    Leaf -> []
+    Base a -> [a]
+    ATree _ _ acts -> concatMap extractAction . reverse $ acts
   where
     extractAction = \case
         BaseCase a -> [a]
@@ -56,8 +61,8 @@ sortFunc :: (MonadIO m)
          -> [Text]
          -> m (Sort Text)
 sortFunc u xs = traceShow xs $ case xs of
-    []  -> pure (SortSuccess noActions)
-    [x] -> pure (SortSuccess (ATree Nothing Nothing [BaseCase x]))
+    []  -> pure (SortSuccess Leaf)
+    [x] -> pure (SortSuccess (Base x))
     xs  -> do
         let (left, right) = splitAt (div (length xs) 2) xs
         SortSuccess actsL <- sortFunc u left
@@ -71,24 +76,15 @@ sortFunc u xs = traceShow xs $ case xs of
         SortSuccess actsR -> do
             maybeSorted <-
                 merge u
-                      (extractActions . actions $ actsL)
-                      (extractActions . actions $ actsR)
+                      (extractActions actsL)
+                      (extractActions actsR)
                       []
             case maybeSorted of
                 Nothing -> continueWithR actsL =<< remerge u actsR
                 Just acts ->
-                    pure (SortSuccess (ATree (Just actsL) (Just actsR) acts))
+                    pure (SortSuccess (ATree actsL actsR acts))
 
 remerge = undefined
-
--- remerge u = \case
---     ATree (Just actsL) (Just actsR) as -> do
---         maybeR <- do
---             let (undoneL, undoneR, as') = undo as [] []
---             merge u undoneL undoneR as'
---         case maybeR of
---             Nothing -> 
-
 
 merge :: (MonadIO m)
       => User m [Text]
