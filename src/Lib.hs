@@ -7,6 +7,7 @@ import Control.Monad (forever)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.Operational
 import Control.Monad.State
+import Data.Foldable
 import Data.Maybe (fromJust, catMaybes)
 import Data.Monoid ((<>))
 import Data.Text (Text)
@@ -21,48 +22,48 @@ import Debug.Trace
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
-uSort ts = extractActions . fromSuccess <$> sortFunc userCompare ts
+uSort ts = toList . fromSuccess <$> sortFunc userCompare ts
 
-data Action a = PickLeft a
-              | PickRight a
-              | SkipLeft [a]
-              | SkipRight [a]
-              | BaseCase a
-              deriving Show
+data Merge a = PickLeft a
+             | PickRight a
+             | SkipLeft [a]
+             | SkipRight [a]
+             | BaseCase a
+             deriving Show
 
-data ActionTree a
-    = Leaf
-    | Base a
-    | ATree
-        { actionsL :: ActionTree a
-        , actionsR :: ActionTree a
-        , actions :: [Action a]
+data SortTree a
+    = Noop
+    | Single a
+    | STree
+        { sortL :: SortTree a
+        , sortR :: SortTree a
+        , merges :: [Merge a]
         }
     deriving Show
 
-data Sort a = SortSuccess { fromSuccess :: ActionTree a }
-            | SortFail [a]
+instance Foldable SortTree where
+    foldMap f = \case
+        Noop -> mempty
+        Single a -> f a
+        STree _ _ ms -> mconcat . map f . concatMap extract $ ms
+      where
+        extract = \case
+            BaseCase a -> [a]
+            PickLeft a -> [a]
+            PickRight a -> [a]
+            SkipLeft as -> as
+            SkipRight as -> as
 
-extractActions :: ActionTree a -> [a]
-extractActions = \case
-    Leaf -> []
-    Base a -> [a]
-    ATree _ _ acts -> concatMap extractAction . reverse $ acts
-  where
-    extractAction = \case
-        BaseCase a -> [a]
-        PickLeft a -> [a]
-        PickRight a -> [a]
-        SkipLeft as -> as
-        SkipRight as -> as
+data Sort a = SortSuccess { fromSuccess :: SortTree a }
+            | SortFail [a]
 
 sortFunc :: (MonadIO m)
          => User m [Text]
          -> [Text]
          -> m (Sort Text)
 sortFunc u xs = traceShow xs $ case xs of
-    []  -> pure (SortSuccess Leaf)
-    [x] -> pure (SortSuccess (Base x))
+    []  -> pure (SortSuccess Noop)
+    [x] -> pure (SortSuccess (Single x))
     xs  -> do
         let (left, right) = splitAt (div (length xs) 2) xs
         SortSuccess actsL <- sortFunc u left
@@ -71,27 +72,24 @@ sortFunc u xs = traceShow xs $ case xs of
     continueWithL actsL = continueWithR actsL <=< sortFunc u
     continueWithR actsL = \case
         SortFail right -> do
-            SortSuccess actsL' <- remerge u actsL
+            SortSuccess actsL' <- resort u actsL
             continueWithL actsL' right
         SortSuccess actsR -> do
             maybeSorted <-
-                merge u
-                      (extractActions actsL)
-                      (extractActions actsR)
-                      []
+                merge u (toList actsL) (toList actsR) []
             case maybeSorted of
-                Nothing -> continueWithR actsL =<< remerge u actsR
+                Nothing -> continueWithR actsL =<< resort u actsR
                 Just acts ->
-                    pure (SortSuccess (ATree actsL actsR acts))
+                    pure (SortSuccess (STree actsL actsR acts))
 
-remerge = undefined
+resort = undefined
 
 merge :: (MonadIO m)
       => User m [Text]
       -> [Text]
       -> [Text]
-      -> [Action Text]
-      -> m (Maybe [Action Text])
+      -> [Merge Text]
+      -> m (Maybe [Merge Text])
 merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
     ([], []) -> pure (Just initialActs)
     ([], ys') -> pure (Just $ SkipRight ys':initialActs)
@@ -102,7 +100,7 @@ merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
          => (Text,[Text])
          -> (Text,[Text])
          -> ProgramViewT UserI m [Text]
-         -> m (Maybe [Action Text])
+         -> m (Maybe [Merge Text])
     eval (x,xs) (y,ys) = \case
         Return n -> return (Just initialActs)
         GetNextStep :>>= k -> merge (k (88, 66, x, y)) origXs origYs initialActs
@@ -121,7 +119,7 @@ merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
         origXs = x:xs
         origYs = y:ys
 
-undo :: [Action a] -> [a] -> [a] -> ([Action a], [a], [a])
+undo :: [Merge a] -> [a] -> [a] -> ([Merge a], [a], [a])
 undo as left right = case as of
     [] -> (as, left, right)
     (a:as) -> case a of
