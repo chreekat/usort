@@ -22,50 +22,87 @@ import Debug.Trace
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
-uSort ts = toList . fromSuccess <$> sortFunc userCompare ts
+uSort [] = pure []
+uSort (x:xs) = toList . fromSuccess <$> sortFunc userCompare (NE x xs)
+
+class ToNonEmpty m where
+    toList' :: m a -> NonEmpty a
+
+data NonEmpty a = NE a [a]
+        deriving Show
+
+instance ToNonEmpty NonEmpty where
+    toList' = id
+
+instance Foldable NonEmpty where
+    foldMap f (NE x xs) = f x <> mconcat (map f xs)
+
+-- | Does a weird even/odd thing, but whatevs
+half x x' = \case
+    [] -> (NE x [], NE x' [])
+    [x''] -> (NE x [], NE x' [x''])
+    (z:z':zs) -> let (h,h') = half z z' zs
+                 in (NE x (toList h), NE x' (toList h'))
 
 data Merge a = PickLeft a
              | PickRight a
-             | SkipLeft [a]
-             | SkipRight [a]
-             | BaseCase a
+             | SkipLeft (NonEmpty a)
+             | SkipRight (NonEmpty a)
              deriving Show
 
+instance ToNonEmpty Merge where
+    toList' = \case
+        PickLeft a -> NE a []
+        PickRight a -> NE a []
+        SkipLeft ne -> ne
+        SkipRight ne -> ne
+
+instance Foldable Merge where
+    foldMap f = \case
+        PickLeft a -> f a
+        PickRight a -> f a
+        SkipLeft (NE a as) -> mconcat (f a : map f as)
+        SkipRight (NE a as) -> mconcat (f a : map f as)
+
 data SortTree a
-    = Noop
-    | Single a
+    = Single a
     | STree
         { sortL :: SortTree a
         , sortR :: SortTree a
-        , merges :: [Merge a]
+        , merges :: NonEmpty (Merge a)
         }
     deriving Show
 
+instance ToNonEmpty SortTree where
+    toList' = \case
+        Single a -> NE a []
+        STree _ _ (NE m ms) ->
+            let (NE x xs) = toList' m
+                xs' = concatMap toList ms
+            in (NE x (xs ++ xs'))
+
 instance Foldable SortTree where
     foldMap f = \case
-        Noop -> mempty
         Single a -> f a
         STree _ _ ms -> mconcat . map f . concatMap extract $ ms
       where
         extract = \case
-            BaseCase a -> [a]
             PickLeft a -> [a]
             PickRight a -> [a]
-            SkipLeft as -> as
-            SkipRight as -> as
+            SkipLeft (NE a as) -> a:as
+            SkipRight (NE a as) -> a:as
 
 data Sort a = SortSuccess { fromSuccess :: SortTree a }
-            | SortFail [a]
+            | SortFail (NonEmpty a)
 
 sortFunc :: (MonadIO m)
          => User m [Text]
-         -> [Text]
+         -> NonEmpty Text
          -> m (Sort Text)
-sortFunc u xs = traceShow xs $ case xs of
-    []  -> pure (SortSuccess Noop)
-    [x] -> pure (SortSuccess (Single x))
-    xs  -> do
-        let (left, right) = splitAt (div (length xs) 2) xs
+sortFunc u (NE x xs) = traceShow (x,xs) $ case xs of
+    [] -> pure (SortSuccess (Single x))
+    (x':xs')  -> do
+        let (left, right) = half x x' xs'
         SortSuccess actsL <- sortFunc u left
         continueWithL actsL right
   where
@@ -75,12 +112,12 @@ sortFunc u xs = traceShow xs $ case xs of
             SortSuccess actsL' <- resort u actsL
             continueWithL actsL' right
         SortSuccess actsR -> do
-            maybeSorted <-
+            maybeActs <-
                 merge u (toList actsL) (toList actsR) []
-            case maybeSorted of
-                Nothing -> continueWithR actsL =<< resort u actsR
-                Just acts ->
-                    pure (SortSuccess (STree actsL actsR acts))
+            case maybeActs of
+                [] -> continueWithR actsL =<< resort u actsR
+                (a:as) ->
+                    pure (SortSuccess (STree actsL actsR (NE a as)))
 
 resort = undefined
 
@@ -89,20 +126,20 @@ merge :: (MonadIO m)
       -> [Text]
       -> [Text]
       -> [Merge Text]
-      -> m (Maybe [Merge Text])
+      -> m [Merge Text]
 merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
-    ([], []) -> pure (Just initialActs)
-    ([], ys') -> pure (Just $ SkipRight ys':initialActs)
-    (xs', []) -> pure (Just $ SkipLeft xs':initialActs)
-    (x:xs', y:ys') -> eval (x,xs') (y,ys') =<< viewT u
+    ([], []) -> pure initialActs
+    ([], y:ys') -> pure (SkipRight (NE y ys'):initialActs)
+    (x:xs', []) -> pure (SkipLeft (NE x xs'):initialActs)
+    (x:xs', y:ys') -> eval (NE x xs') (NE y ys') =<< viewT u
   where
     eval :: (MonadIO m)
-         => (Text,[Text])
-         -> (Text,[Text])
+         => NonEmpty Text
+         -> NonEmpty Text
          -> ProgramViewT UserI m [Text]
-         -> m (Maybe [Merge Text])
-    eval (x,xs) (y,ys) = \case
-        Return n -> return (Just initialActs)
+         -> m [Merge Text]
+    eval (NE x xs) (NE y ys) = \case
+        Return n -> pure initialActs
         GetNextStep :>>= k -> merge (k (88, 66, x, y)) origXs origYs initialActs
         Compare o :>>= k -> case o of
             LT -> merge (k ()) xs origYs (PickLeft x:initialActs)
@@ -111,24 +148,26 @@ merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
         Rewrite2 y' :>>= k -> merge (k ()) origXs (y':ys) initialActs
         Undo :>>= k ->
             case initialActs of
-                [] -> return Nothing
-                as ->
-                    let (as', undoneL, undoneR) = undo as origXs origYs
-                    in merge (k ()) undoneL undoneR as'
+                [] -> return []
+                (a:as) -> case undo (NE a as) origXs origYs of
+                    Nothing -> pure []
+                    Just (as', undoneL, undoneR) ->
+                        merge (k ()) undoneL undoneR as'
       where
         origXs = x:xs
         origYs = y:ys
+        push as a = Just (NE a []) `mplus` as
 
-undo :: [Merge a] -> [a] -> [a] -> ([Merge a], [a], [a])
-undo as left right = case as of
-    [] -> (as, left, right)
-    (a:as) -> case a of
-        -- Just redo
-        BaseCase _ -> (as, left, right)
-        PickLeft b -> (as, b:left, right)
-        PickRight b -> (as, left, b:right)
-        SkipLeft bs -> undo as (bs++left) right
-        SkipRight bs -> undo as left (bs++right)
+undo :: NonEmpty (Merge a) -> [a] -> [a] -> Maybe ([Merge a], [a], [a])
+undo (NE a as) left right = case a of
+    PickLeft x -> Just (as, x:left, right)
+    PickRight x -> Just (as, left, x:right)
+    SkipLeft xs -> case as of
+        [] -> Nothing
+        (a':as') -> undo (NE a' as') (toList xs++left) right
+    SkipRight xs -> case as of
+        [] -> Nothing
+        (a':as') -> undo (NE a' as') left (toList xs++right)
 
 -- ##
 -- ## operations we permit the user
