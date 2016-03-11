@@ -42,7 +42,7 @@ data Sort a = SortSuccess { fromSuccess :: ActionTree a }
             | SortFail [a]
 
 extractActions :: [Action a] -> [a]
-extractActions = concat . map extractAction . reverse
+extractActions = concatMap extractAction . reverse
   where
     extractAction = \case
         BaseCase a -> [a]
@@ -63,23 +63,21 @@ sortFunc u xs = traceShow xs $ case xs of
         SortSuccess actsL <- sortFunc u left
         continueWithL actsL right
   where
-    continueWithL actsL right =
-        continueWithR actsL =<< sortFunc u right
-    continueWithR actsL maybeR = do
-        case maybeR of
-            SortFail right -> do
-                SortSuccess actsL' <- remerge u actsL
-                continueWithL actsL' right
-            SortSuccess actsR -> do
-                maybeSorted <-
-                    merge u
-                          (extractActions . actions $ actsL)
-                          (extractActions . actions $ actsR)
-                          []
-                case maybeSorted of
-                    Nothing -> continueWithR actsL =<< remerge u actsR
-                    Just acts ->
-                        pure (SortSuccess (ATree (Just actsL) (Just actsR) acts))
+    continueWithL actsL = continueWithR actsL <=< sortFunc u
+    continueWithR actsL = \case
+        SortFail right -> do
+            SortSuccess actsL' <- remerge u actsL
+            continueWithL actsL' right
+        SortSuccess actsR -> do
+            maybeSorted <-
+                merge u
+                      (extractActions . actions $ actsL)
+                      (extractActions . actions $ actsR)
+                      []
+            case maybeSorted of
+                Nothing -> continueWithR actsL =<< remerge u actsR
+                Just acts ->
+                    pure (SortSuccess (ATree (Just actsL) (Just actsR) acts))
 
 remerge = undefined
 
@@ -97,7 +95,7 @@ merge :: (MonadIO m)
       -> [Text]
       -> [Text]
       -> [Action Text]
-      -> m (Maybe ([Action Text]))
+      -> m (Maybe [Action Text])
 merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
     ([], []) -> pure (Just initialActs)
     ([], ys') -> pure (Just $ SkipRight ys':initialActs)
