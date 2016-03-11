@@ -127,12 +127,8 @@ continueWithR u actsL = \case
         SortSuccess actsL' <- resort u actsL
         continueWithL u actsL' right
     SortSuccess actsR -> do
-        maybeActs <-
-            merge u (toList actsL) (toList actsR) []
-        case maybeActs of
-            [] -> continueWithR u actsL =<< resort u actsR
-            (a:as) ->
-                pure (SortSuccess (STree actsL actsR (NE a as)))
+        merges <- merge u (toList actsL) (toList actsR) []
+        continueWithBoth u actsL actsR merges
 
 resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Sort Text)
 resort u = \case
@@ -140,11 +136,19 @@ resort u = \case
     tree@STree{..} -> case undo merges [] [] of
         Nothing -> pure (SortFail (toList' tree))
         Just (as', undoneL, undoneR) -> do
-            maybeActs <- merge u undoneL undoneR as'
-            case maybeActs of
-                [] -> continueWithR u sortL =<< resort u sortR
-                (a:as) ->
-                    pure (SortSuccess (tree { merges = NE a as } ))
+            merges <- merge u undoneL undoneR as'
+            continueWithBoth u sortL sortR merges
+
+continueWithBoth :: MonadIO m
+                 => User m [Text]
+                 -> SortTree Text
+                 -> SortTree Text
+                 -> [Merge Text]
+                 -> m (Sort Text)
+continueWithBoth u l r = \case
+    [] -> continueWithR u l =<< resort u r
+    (a:as) ->
+        pure (SortSuccess (STree l r (NE a as)))
 
 merge :: (MonadIO m)
       => User m [Text]
