@@ -19,8 +19,6 @@ import System.IO
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Debug.Trace
-
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
@@ -31,7 +29,7 @@ class ToNonEmpty m where
     toList' :: m a -> NonEmpty a
 
 data NonEmpty a = NE a [a]
-        deriving Show
+    deriving Show
 
 instance ToNonEmpty NonEmpty where
     toList' = id
@@ -47,8 +45,8 @@ half x x' = \case
                  in (NE x (toList h), NE x' (toList h'))
 
 reverse' (NE x xs) = case reverse xs of
-    [] -> (NE x xs)
-    (x':xs') -> (NE x' (xs' ++ [x]))
+    [] -> NE x xs
+    (x':xs') -> NE x' (xs' ++ [x])
 
 data Merge a = PickLeft a
              | PickRight a
@@ -85,7 +83,7 @@ instance ToNonEmpty SortTree where
         STree _ _ (NE m ms) ->
             let (NE x xs) = toList' m
                 xs' = concatMap toList ms
-            in (NE x (xs ++ xs'))
+            in NE x (xs ++ xs')
 
 instance Foldable SortTree where
     foldMap f = \case
@@ -105,17 +103,25 @@ sortFunc :: (MonadIO m)
          => User m [Text]
          -> NonEmpty Text
          -> m (Sort Text)
-sortFunc u (NE x xs) = traceShow (x,xs) $ case xs of
+sortFunc u (NE x xs) = case xs of
     [] -> pure (SortSuccess (Single x))
     (x':xs')  -> do
         let (left, right) = half x x' xs'
         SortSuccess actsL <- sortFunc u left
         continueWithL u actsL right
 
-continueWithL :: MonadIO m => User m [Text] -> SortTree Text -> NonEmpty Text -> m (Sort Text)
+continueWithL :: MonadIO m
+              => User m [Text]
+              -> SortTree Text
+              -> NonEmpty Text
+              -> m (Sort Text)
 continueWithL u actsL = continueWithR u actsL <=< sortFunc u
 
-continueWithR :: MonadIO m => User m [Text] -> SortTree Text -> Sort Text -> m (Sort Text)
+continueWithR :: MonadIO m
+              => User m [Text]
+              -> SortTree Text
+              -> Sort Text
+              -> m (Sort Text)
 continueWithR u actsL = \case
     SortFail right -> do
         SortSuccess actsL' <- resort u actsL
@@ -138,7 +144,7 @@ resort u = \case
             case maybeActs of
                 [] -> continueWithR u sortL =<< resort u sortR
                 (a:as) ->
-                    pure (SortSuccess (tree { merges = (NE a as) } ))
+                    pure (SortSuccess (tree { merges = NE a as } ))
 
 merge :: (MonadIO m)
       => User m [Text]
@@ -146,7 +152,7 @@ merge :: (MonadIO m)
       -> [Text]
       -> [Merge Text]
       -> m [Merge Text]
-merge u xs ys initialActs = traceShow (xs, ys, initialActs) $ case (xs, ys) of
+merge u xs ys initialActs = case (xs, ys) of
     ([], []) -> pure initialActs
     ([], y:ys') -> pure (SkipRight (NE y ys'):initialActs)
     (x:xs', []) -> pure (SkipLeft (NE x xs'):initialActs)
