@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Lib where
 
 import Control.Monad (forever)
@@ -44,6 +46,10 @@ half x x' = \case
     (z:z':zs) -> let (h,h') = half z z' zs
                  in (NE x (toList h), NE x' (toList h'))
 
+reverse' (NE x xs) = case reverse xs of
+    [] -> (NE x xs)
+    (x':xs') -> (NE x' (xs' ++ [x]))
+
 data Merge a = PickLeft a
              | PickRight a
              | SkipLeft (NonEmpty a)
@@ -84,7 +90,7 @@ instance ToNonEmpty SortTree where
 instance Foldable SortTree where
     foldMap f = \case
         Single a -> f a
-        STree _ _ ms -> mconcat . map f . concatMap extract $ ms
+        STree _ _ ms -> mconcat . map f . concatMap extract . reverse' $ ms
       where
         extract = \case
             PickLeft a -> [a]
@@ -104,22 +110,35 @@ sortFunc u (NE x xs) = traceShow (x,xs) $ case xs of
     (x':xs')  -> do
         let (left, right) = half x x' xs'
         SortSuccess actsL <- sortFunc u left
-        continueWithL actsL right
-  where
-    continueWithL actsL = continueWithR actsL <=< sortFunc u
-    continueWithR actsL = \case
-        SortFail right -> do
-            SortSuccess actsL' <- resort u actsL
-            continueWithL actsL' right
-        SortSuccess actsR -> do
-            maybeActs <-
-                merge u (toList actsL) (toList actsR) []
-            case maybeActs of
-                [] -> continueWithR actsL =<< resort u actsR
-                (a:as) ->
-                    pure (SortSuccess (STree actsL actsR (NE a as)))
+        continueWithL u actsL right
 
-resort = undefined
+continueWithL :: MonadIO m => User m [Text] -> SortTree Text -> NonEmpty Text -> m (Sort Text)
+continueWithL u actsL = continueWithR u actsL <=< sortFunc u
+
+continueWithR :: MonadIO m => User m [Text] -> SortTree Text -> Sort Text -> m (Sort Text)
+continueWithR u actsL = \case
+    SortFail right -> do
+        SortSuccess actsL' <- resort u actsL
+        continueWithL u actsL' right
+    SortSuccess actsR -> do
+        maybeActs <-
+            merge u (toList actsL) (toList actsR) []
+        case maybeActs of
+            [] -> continueWithR u actsL =<< resort u actsR
+            (a:as) ->
+                pure (SortSuccess (STree actsL actsR (NE a as)))
+
+resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Sort Text)
+resort u = \case
+    Single a -> pure (SortFail (NE a []))
+    tree@STree{..} -> case undo merges [] [] of
+        Nothing -> pure (SortFail (toList' tree))
+        Just (as', undoneL, undoneR) -> do
+            maybeActs <- merge u undoneL undoneR as'
+            case maybeActs of
+                [] -> continueWithR u sortL =<< resort u sortR
+                (a:as) ->
+                    pure (SortSuccess (tree { merges = (NE a as) } ))
 
 merge :: (MonadIO m)
       => User m [Text]
