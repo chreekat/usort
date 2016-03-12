@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Lib where
 
@@ -42,23 +41,23 @@ half x x' = \case
     (z:z':zs) -> let (h,h') = half z z' zs
                  in (x <| h, x' <| h')
 
-data Merge a = PickLeft a (Merge a)
-             | PickRight a (Merge a)
+data Merge a = PickLeft a
+             | PickRight a
              | SkipLeft (NonEmpty a)
              | SkipRight (NonEmpty a)
              deriving Show
 
 instance ToNonEmpty Merge where
     toList' = \case
-        PickLeft a c -> a <| toList' c
-        PickRight a c -> a <| toList' c
+        PickLeft a -> a :| []
+        PickRight a -> a :| []
         SkipLeft ne -> ne
         SkipRight ne -> ne
 
 instance Foldable Merge where
     foldMap f = \case
-        PickLeft a c -> f a `mappend` foldMap f c
-        PickRight a c -> f a `mappend` foldMap f c
+        PickLeft a -> f a
+        PickRight a -> f a
         SkipLeft (a :| as) -> mconcat (f a : map f as)
         SkipRight (a :| as) -> mconcat (f a : map f as)
 
@@ -67,23 +66,19 @@ data SortTree a
     | STree
         { sortL :: SortTree a
         , sortR :: SortTree a
-        , merges :: Merge a
+        , merges :: NonEmpty (Merge a)
         }
     deriving Show
 
 instance ToNonEmpty SortTree where
     toList' = \case
         Single a -> a :| []
-        STree _ _ ms -> case ms of
-            PickLeft a c -> a <| toList' c
-            PickRight a c -> a <| toList' c
-            SkipLeft as -> as
-            SkipRight as -> as
+        STree _ _ ms -> sconcat (fmap toList' ms)
 
 instance Foldable SortTree where
     foldMap f = \case
         Single a -> f a
-        STree _ _ ms -> foldMap f ms
+        STree _ _ ms -> foldMap f (concatMap toList ms)
 
 sortFunc :: (MonadIO m)
          => User m [Text]
@@ -113,83 +108,126 @@ tryRight u actsL = \case
     -- Couldn't sort the right half? Try the left half again.
     Left right -> tryLeft u right =<< resort u actsL
     Right actsR -> do
-        mms <- merge u (toList' actsL) (toList' actsR) []
-        case mms of
+        mf <- merge u (toList' actsL) (toList' actsR)
+        case mf of
             -- Can't merge? Try the right half again.
             Nothing -> tryRight u actsL =<< resort u actsR
-            Just ms -> pure (Right (STree actsL actsR ms))
+            Just f -> pure (Right (STree actsL actsR f))
 
-resort :: MonadIO m => User m [Text] -> SortTree Text -> m (Either (NonEmpty Text) (SortTree Text))
-resort u = \case
-    Single a -> pure (Left (a :| []))
-    tree@STree{..} -> case undo merges [] [] of
-        Nothing -> pure (Left (toList' tree))
-        Just (as', undoneL, undoneR) -> do
-            merges <- merge u undoneL undoneR as'
-            continueWithBoth u sortL sortR merges
+-- | Resort takes a tree and pops enough actions so that the user has
+-- something to do, then continues. Failing that, it returns the list the
+-- tree represents.
 
-continueWithBoth :: MonadIO m
-                 => User m [Text]
-                 -> SortTree Text
-                 -> SortTree Text
-                 -> [Merge Text]
-                 -> m (Either (NonEmpty Text) (SortTree Text))
-continueWithBoth u l r = \case
-    [] -> continueWithR u l =<< resort u r
-    (a:as) ->
-        pure (Right (STree l r (a :| as)))
+resort :: MonadIO m
+       => User m [Text]
+       -> SortTree Text
+       -> m (Either (NonEmpty Text) (SortTree Text))
+resort u (Single a) = pure (Left (a :| []))
+resort u (STree actsL actsR m) =
+    fmap (STree actsL actsR) <$> resort' u [] [] m
+
+resort' :: MonadIO m
+        => User m [Text]
+        -> [Text]
+        -> [Text]
+        -> NonEmpty (Merge Text)
+        -> m (Either (NonEmpty Text) (NonEmpty (Merge Text)))
+resort' u lefts rights (a :| as) = case a of
+        -- Fill the right a bit. Can't pop more, so this is the end.
+        SkipRight xs@(x :| xs') -> case lefts of
+            [] -> pure (Left (x :| xs' <> rights)) -- Nothing to merge.
+            (l:ls) -> do
+                -- Merge our right-skipped xs, plus any other rights
+                mm <- merge u (l :| ls) (x :| xs' <> rights)
+                case mm of
+                    -- Unsuccessful merge. Bail with lefts + rights
+                    Nothing -> pure (Left (l :| ls <> toList xs <> rights))
+                    -- Success!
+                    Just m -> pure (Right m)
+        -- Same as above
+        SkipLeft xs@(x :| xs') -> case rights of
+            [] -> pure (Left (x :| xs' <> lefts)) -- Nothing to merge.
+            (r:rs) -> do
+                -- Merge our right-skipped xs, plus any other rights
+                mm <- merge u (x :| xs' <> lefts) (r :| rs)
+                case mm of
+                    -- Unsuccessful merge. Bail with lefts + rights
+                    Nothing -> pure (Left (x :| xs' <> lefts <> rights))
+                    -- Success!
+                    Just m -> pure (Right m)
+        PickLeft x -> case rights of
+            [] -> case as of
+                [] -> pure (Left (x :| []))
+                (a':as') -> resort' u [x] [] (a' :| as')
+            (r:rs) -> do
+                mm <- merge u (x :| lefts) (r :| rs)
+                case mm of
+                    Nothing -> case as of
+                        [] -> pure (Left (x :| lefts <> (r : rs)))
+                        (a':as') -> resort' u (x : lefts) rights (a' :| as')
+                    Just m -> pure (Right m)
+        -- Same as above
+        PickRight x -> case lefts of
+            [] -> case as of
+                [] -> pure (Left (x :| []))
+                (a':as') -> resort' u [] [x] (a' :| as')
+            (l:ls) -> do
+                mm <- merge u (l :| ls) (x :| rights)
+                case mm of
+                    Nothing -> case as of
+                        [] -> pure (Left ( l :| lefts <> (x : rights)))
+                        (a':as') -> resort' u lefts (x : rights) (a' :| as')
+                    Just m -> pure (Right m)
 
 merge :: (MonadIO m)
       => User m [Text]
       -> NonEmpty Text
       -> NonEmpty Text
-      -> [Merge Text]
-      -> m (Maybe (Merge Text))
-merge u xs ys initialActs = case (xs, ys) of
-    ([], []) -> pure initialActs
-    ([], y:ys') -> pure (SkipRight (y :| ys'):initialActs)
-    (x:xs', []) -> pure (SkipLeft (x :| xs'):initialActs)
-    (x:xs', y:ys') -> eval (x :| xs') (y :| ys') =<< viewT u
-  where
-    eval :: (MonadIO m)
-         => NonEmpty Text
-         -> NonEmpty Text
-         -> ProgramViewT UserI m [Text]
-         -> m [Merge Text]
-    eval (x :| xs) (y :| ys) = \case
-        Return n -> pure initialActs
-        GetNextStep :>>= k -> merge (k (88, 66, x, y)) origXs origYs initialActs
-        Compare o :>>= k -> case o of
-            LT -> merge (k ()) xs origYs (PickLeft x:initialActs)
-            _  -> merge (k ()) origXs ys (PickRight y:initialActs)
-        Rewrite1 x' :>>= k -> merge (k ()) (x':xs) origYs initialActs
-        Rewrite2 y' :>>= k -> merge (k ()) origXs (y':ys) initialActs
-        Undo :>>= k ->
-            case initialActs of
-                [] -> return []
-                (a:as) -> case undo (a :| as) origXs origYs of
-                    Nothing -> pure []
-                    Just (as', undoneL, undoneR) ->
-                        merge (k ()) undoneL undoneR as'
-      where
-        origXs = x:xs
-        origYs = y:ys
-        push as a = Just (a :| []) `mplus` as
+      -> m (Maybe (NonEmpty (Merge Text)))
+merge u l r = merge' u l r Nothing
 
-undo :: Merge a -> [a] -> [a] -> Maybe (Maybe (Merge a), NonEmpty a, NonEmpty a)
-undo a left right = case a of
-    PickLeft x c -> case right of
-        [] -> undo c (x:left) right
-        (r:rs)  -> Just (Just c, x :| left, r :| rs)
-    PickRight x c -> case left of
-        [] -> undo c left (x:right)
-        (l:ls)  -> Just (Just c, l :| ls, x :| right)
+merge' = undefined
+-- merge' u xs ys f = eval xs ys =<< viewT u
+--   where
+--     eval :: (MonadIO m)
+--          => NonEmpty Text
+--          -> NonEmpty Text
+--          -> ProgramViewT UserI m [Text]
+--          -> m [Merge Text]
+--     eval (x :| xs) (y :| ys) = \case
+--         Return n -> pure Nothing
+--         GetNextStep :>>= k -> merge (k (88, 66, x, y)) origXs origYs initialActs
+--         Compare o :>>= k -> case o of
+--             LT -> merge (k ()) xs origYs (PickLeft x . f)
+--             _  -> merge (k ()) origXs ys (PickRight y . f)
+--         Rewrite1 x' :>>= k -> merge (k ()) (x':xs) origYs f
+--         Rewrite2 y' :>>= k -> merge (k ()) origXs (y':ys) f
+--         Undo :>>= k ->
+--             case (f ()) of
+--                 [] -> return []
+--                 (a:as) -> case undo (a :| as) origXs origYs of
+--                     Nothing -> pure []
+--                     Just (as', undoneL, undoneR) ->
+--                         merge (k ()) undoneL undoneR as'
+
+undo :: NonEmpty (Merge a) -> [a] -> [a] -> Maybe ([Merge a], NonEmpty a, NonEmpty a)
+undo (a :| as) left right = case a of
+    PickLeft x -> case right of
+        [] -> case as of
+            [] -> Nothing
+            (a':as') -> undo (a':|as') (x:left) right
+        (r:rs)  -> Just (as, x :| left, r :| rs)
+    PickRight x -> case left of
+        [] -> case as of
+            [] -> Nothing
+            (a':as') -> undo (a':|as') (x:left) right
+        (r:rs)  -> Just (as, x :| left, r :| rs)
     SkipLeft xs -> case right of
         [] -> Nothing
-        (r:rs) -> Just (Nothing, xs, r:|rs)
+        (r:rs) -> Just (as, xs, r :| rs)
     SkipRight xs -> case left of
         [] -> Nothing
-        (l:ls) -> Just (Nothing, l:|ls, xs)
+        (l:ls) -> Just (as, l :| ls, xs)
 
 -- ##
 -- ## operations we permit the user
