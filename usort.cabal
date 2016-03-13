@@ -27,11 +27,12 @@ library
                        , semigroups >= 0.18.1
   default-language:    Haskell2010
 
-executable usort-exe
+executable usort
   hs-source-dirs:      app
   main-is:             Main.hs
   build-depends:       base
                      , usort
+                     , text
   default-language:    Haskell2010
 
 test-suite usort-test
