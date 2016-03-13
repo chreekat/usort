@@ -6,11 +6,11 @@
 
 module Lib where
 
-import Prelude
-import qualified Prelude as Pre
+import Prelude as Pre
 
 import Control.Monad.Operational
-import Control.Monad.State
+import Control.Monad (forever)
+import Control.Monad.IO.Class
 import Data.Foldable as F
 import Data.List.NonEmpty hiding (toList, map, reverse)
 import Data.Semigroup
@@ -53,6 +53,22 @@ data Provenance
         | R Provenance
         | B
 
+data Sorting a
+        = Abort
+        | Sorting a
+        | Unsorting
+        deriving (Show, Functor)
+
+instance Applicative Sorting where
+    pure = Sorting
+    (Sorting f) <*> (Sorting a) = Sorting (f a)
+    (Sorting f) <*> Abort = Abort
+    (Sorting f) <*> Unsorting = Unsorting
+    Abort <*> _ = Abort
+    Unsorting <*> _ = Unsorting
+
+type TextSort = Sorting (SortState Text)
+
 instance Show Provenance where
     show B = "B"
     show (L p) = "L:" ++ show p
@@ -77,6 +93,20 @@ data SortState a
         | Merging [Sorted a] [Sorted a] [Sorted a]
         | Sorted [Sorted a]
 
+instance Foldable SortState where
+    foldMap f = \case
+        Unsorted xs -> foldMap f xs
+        SortingLeft l rs -> foldMap f l `mappend` foldMap f rs
+        SortingRight ls r -> foldMap f (map val ls) `mappend` foldMap f r
+        Merging ls rs result -> go ls rs result
+            where go ls rs [] = foldMap f (map val ls) `mappend` foldMap f (map val rs)
+                  go ls rs (x:xs) = case unmerge ls rs last' of
+                      Right (ls', rs') -> go ls' rs' init'
+                      Left a -> f a
+                    where last' = NE.last unempty
+                          init' = NE.init unempty
+                          unempty = x :| xs
+
 instance Show a => Show (SortState a) where
     show (Unsorted xs) = "Unsorted " ++ show (toList xs)
     show (SortingLeft l rs) =
@@ -87,17 +117,18 @@ instance Show a => Show (SortState a) where
         "Merging " ++ show ls ++ " " ++ show rs ++ " " ++ show results
     show (Sorted ls) = "Sorted " ++ show ls
 
-sortFunc :: User IO [Text] -> NonEmpty Text -> IO [Text]
+sortFunc :: User IO TextSort -> NonEmpty Text -> IO [Text]
 sortFunc user xs = go (Unsorted xs)
   where
     go step = do
         f <- forward user step
         trace "PIP!" $ case f of
-            Just (Sorted ys) -> return (map val ys)
-            Just (next) -> go next
-            Nothing -> go (trace "NO IDEA LOL" (backward step "Bwd | "))
+            Sorting (Sorted ys) -> return (map val ys)
+            Sorting (next) -> go next
+            Unsorting -> go (trace "NO IDEA LOL" (backward step "Bwd | "))
+            Abort -> pure (toList step)
 
-forward :: User IO [Text] -> SortState Text -> IO (Maybe (SortState Text))
+forward :: User IO TextSort -> SortState Text -> IO TextSort
 forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
     Sorted _ -> go zzz
     Unsorted (x :| xs) -> case xs of
@@ -121,7 +152,7 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
     Merging (l:ls) (r:rs) xs -> eval =<< viewT user
       where
         eval = \case
-            Return _ -> error "Inconceivable"
+            Return _ -> pure Abort
             GetNextStep :>>= k -> forward (k (66, 88, val l, val r)) zzz
             Rewrite1 l' :>>= k -> forward (k ()) (Merging ((l' <$ l) : ls) (r:rs) xs)
             Rewrite2 r' :>>= k -> forward (k ()) (Merging (l:ls) ((r' <$ r) : rs) xs)
@@ -137,10 +168,10 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
             Undo :>>= k -> trace "UNDONE :(" $ back zzz
               where
                 back zzz = case (backward zzz "Bwd | ") of
-                    (Unsorted xs) -> pure Nothing
+                    (Unsorted xs) -> pure Unsorting
                     prev -> forward (k ()) prev
   where
-    go = pure . Just
+    go = pure . Sorting
     fwd' = forward user
     -- fwd' x = (trace "DESCEND" (forward user) x) <* trace "ASCEND" (pure ())
 
@@ -202,12 +233,20 @@ data UserI a where
     Rewrite2    :: Text -> UserI ()
     Undo        :: UserI ()
 
+instance Show a => Show (UserI a) where
+    show GetNextStep = "GetNextStep"
+    show (Compare a) = "Compare " ++ (show a)
+    show (Rewrite1 a) = "Rewrite1 " ++ (show a)
+    show (Rewrite2 a) = "Rewrite2 " ++ (show a)
+    show Undo = "Undo"
+
+
 type User m a = ProgramT UserI m a
 
 getNextStep = singleton GetNextStep
 
 -- Here's a "program".
-userCompare :: MonadIO m => User m [Text]
+userCompare :: MonadIO m => User m TextSort
 userCompare = forever (getNextStep >>= doSomething)
   where
     doSomething :: MonadIO m => (Int, Int, Text, Text) -> User m ()
@@ -252,4 +291,3 @@ printPrompt (remaining, estimate, x, y) = do
     T.putStr "-> "
   where
     hdrFmt = "(~" % int % "/" % int % ") Which is more important?"
-
