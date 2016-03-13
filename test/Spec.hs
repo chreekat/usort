@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 import Prelude as Pre
 
+import Control.Monad.State
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.List
@@ -31,15 +32,15 @@ instance Arbitrary (UserI ()) where
                           ,(1, (Rewrite2 . T.pack) <$> arbitrary)
                           ]
 
-chaosCompare :: User IO TextSort
+chaosCompare :: User (StateT (Int,Int) IO) TextSort
 chaosCompare = forever goNext
   where
-    goNext :: User IO ()
+    goNext :: User (StateT (Int,Int) IO) ()
     goNext = do
         act <- liftIO $ generate arbitrary
         singleton act
 
-pureCompare :: User IO TextSort
+pureCompare :: User (StateT (Int,Int) IO) TextSort
 pureCompare = forever (getNextStep >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))

@@ -10,6 +10,7 @@ import Prelude as Pre
 
 import Control.Monad.Operational
 import Control.Monad (forever)
+import Control.Monad.State
 import Control.Monad.IO.Class
 import Data.Foldable as F
 import Data.List.NonEmpty hiding (toList, map, reverse)
@@ -117,18 +118,20 @@ instance Show a => Show (SortState a) where
         "Merging " ++ show ls ++ " " ++ show rs ++ " " ++ show results
     show (Sorted ls) = "Sorted " ++ show ls
 
-sortFunc :: User IO TextSort -> NonEmpty Text -> IO [Text]
-sortFunc user xs = go (Unsorted xs)
+sortFunc :: User (StateT (Int,Int) IO) TextSort -> NonEmpty Text -> IO [Text]
+sortFunc user xs = go (count,count) (Unsorted xs)
   where
-    go step = do
-        f <- forward user step
+    len = fromRational . fromIntegral . NE.length $ xs
+    count = floor $ len * log len
+    go ct step = do
+        (f, remaining) <- runStateT (forward user step) ct
         trace "PIP!" $ case f of
             Sorting (Sorted ys) -> return (map val ys)
-            Sorting (next) -> go next
-            Unsorting -> go (trace "NO IDEA LOL" (backward step "Bwd | "))
+            Sorting (next) -> go remaining next
+            Unsorting -> go remaining (trace "NO IDEA LOL" (backward step "Bwd | "))
             Abort -> pure (toList step)
 
-forward :: User IO TextSort -> SortState Text -> IO TextSort
+forward :: User (StateT (Int,Int) IO) TextSort -> SortState Text -> StateT (Int,Int) IO TextSort
 forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
     Sorted _ -> go zzz
     Unsorted (x :| xs) -> case xs of
@@ -149,14 +152,16 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
 
     Merging [] rs xs -> go (Sorted (xs ++ map fromRight rs))
     Merging ls [] xs -> go (Sorted (xs ++ map fromLeft ls))
-    Merging (l:ls) (r:rs) xs -> eval =<< viewT user
+    Merging (l:ls) (r:rs) xs -> do
+        (ct,orig) <- get
+        eval ct orig =<< viewT user
       where
-        eval = \case
+        eval ct orig = \case
             Return _ -> pure Abort
-            GetNextStep :>>= k -> forward (k (66, 88, val l, val r)) zzz
+            GetNextStep :>>= k -> forward (k (ct, orig, val l, val r)) zzz
             Rewrite1 l' :>>= k -> forward (k ()) (Merging ((l' <$ l) : ls) (r:rs) xs)
             Rewrite2 r' :>>= k -> forward (k ()) (Merging (l:ls) ((r' <$ r) : rs) xs)
-            Compare o :>>= k -> case (o, ls, rs) of
+            Compare o :>>= k -> modify pred' >> case (o, ls, rs) of
                 (LT, [], _) -> forward (k ()) (Sorted xs')
                   where xs' = xs ++ [fromLeft l] ++ (map fromRight (r:rs))
                 (LT, _, _) -> forward (k ()) (Merging ls (r:rs) xs')
@@ -169,10 +174,13 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
               where
                 back zzz = case (backward zzz "Bwd | ") of
                     (Unsorted xs) -> pure Unsorting
-                    prev -> forward (k ()) prev
+                    prev -> modify succ' >> forward (k ()) prev
   where
     go = pure . Sorting
     fwd' = forward user
+    pred' (0,n) = (0,n)
+    pred' (x,n) = (pred x,n)
+    succ' (x,n) = (succ x,n)
     -- fwd' x = (trace "DESCEND" (forward user) x) <* trace "ASCEND" (pure ())
 
 backward :: SortState Text -> String -> SortState Text
