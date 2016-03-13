@@ -9,9 +9,7 @@ module Lib where
 import Prelude as Pre
 
 import Control.Monad.Operational
-import Control.Monad (forever)
 import Control.Monad.State
-import Control.Monad.IO.Class
 import Data.Foldable as F
 import Data.List.NonEmpty hiding (toList, map, reverse)
 import Data.Semigroup
@@ -47,7 +45,7 @@ half one two rest =
     in case (left, right) of
         ([], []) -> (one :| [], two :| [])
         (xs, []) -> (one :| [], two :| xs)
-        (xs, (y:ys)) -> (one :| two : xs, y :| ys)
+        (xs, y:ys) -> (one :| two : xs, y :| ys)
 
 data Provenance
         = L Provenance
@@ -63,8 +61,8 @@ data Sorting a
 instance Applicative Sorting where
     pure = Sorting
     (Sorting f) <*> (Sorting a) = Sorting (f a)
-    (Sorting f) <*> Abort = Abort
-    (Sorting f) <*> Unsorting = Unsorting
+    (Sorting _) <*> Abort = Abort
+    (Sorting _) <*> Unsorting = Unsorting
     Abort <*> _ = Abort
     Unsorting <*> _ = Unsorting
 
@@ -96,10 +94,11 @@ data SortState a
 
 instance Foldable SortState where
     foldMap f = \case
+        Sorted xs -> foldMap f (map val xs)
         Unsorted xs -> foldMap f xs
         SortingLeft l rs -> foldMap f l `mappend` foldMap f rs
         SortingRight ls r -> foldMap f (map val ls) `mappend` foldMap f r
-        Merging ls rs result -> go ls rs result
+        Merging lll rrr result -> go lll rrr result
             where go ls rs [] = foldMap f (map val ls) `mappend` foldMap f (map val rs)
                   go ls rs (x:xs) = case unmerge ls rs last' of
                       Right (ls', rs') -> go ls' rs' init'
@@ -118,16 +117,19 @@ instance Show a => Show (SortState a) where
         "Merging " ++ show ls ++ " " ++ show rs ++ " " ++ show results
     show (Sorted ls) = "Sorted " ++ show ls
 
+nlogn :: Int -> Int
+nlogn n = let g = fromRational . fromIntegral $ n
+          in floor (g * log g :: Double)
+
 sortFunc :: User (StateT (Int,Int) IO) TextSort -> NonEmpty Text -> IO [Text]
 sortFunc user xs = go (count,count) (Unsorted xs)
   where
-    len = fromRational . fromIntegral . NE.length $ xs
-    count = floor $ len * log len
+    count = nlogn (NE.length xs)
     go ct step = do
         (f, remaining) <- runStateT (forward user step) ct
         trace "PIP!" $ case f of
             Sorting (Sorted ys) -> return (map val ys)
-            Sorting (next) -> go remaining next
+            Sorting next -> go remaining next
             Unsorting -> go remaining (trace "NO IDEA LOL" (backward step "Bwd | "))
             Abort -> pure (toList step)
 
@@ -163,17 +165,17 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
             Rewrite2 r' :>>= k -> forward (k ()) (Merging (l:ls) ((r' <$ r) : rs) xs)
             Compare o :>>= k -> modify pred' >> case (o, ls, rs) of
                 (LT, [], _) -> forward (k ()) (Sorted xs')
-                  where xs' = xs ++ [fromLeft l] ++ (map fromRight (r:rs))
+                  where xs' = xs ++ [fromLeft l] ++ map fromRight (r:rs)
                 (LT, _, _) -> forward (k ()) (Merging ls (r:rs) xs')
                   where xs' = xs ++ [fromLeft l]
                 (_ , _, []) -> forward (k ()) (Sorted xs')
-                  where xs' = xs ++ [fromRight r] ++ (map fromLeft (l:ls))
+                  where xs' = xs ++ [fromRight r] ++ map fromLeft (l:ls)
                 (_ , _, _) -> forward (k ()) (Merging (l:ls) rs xs')
                   where xs' = xs ++ [fromRight r]
             Undo :>>= k -> trace "UNDONE :(" $ back zzz
               where
-                back zzz = case (backward zzz "Bwd | ") of
-                    (Unsorted xs) -> pure Unsorting
+                back z = case backward z "Bwd | " of
+                    (Unsorted _) -> pure Unsorting
                     prev -> modify succ' >> forward (k ()) prev
   where
     go = pure . Sorting
@@ -183,6 +185,12 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
     succ' (x,n) = (succ x,n)
     -- fwd' x = (trace "DESCEND" (forward user) x) <* trace "ASCEND" (pure ())
 
+shift x xs = (init', last')
+  where
+    nonempty = x :| xs
+    init' = NE.init nonempty
+    last' = NE.last nonempty
+
 backward :: SortState Text -> String -> SortState Text
 backward zzz f = trace (f ++ show zzz) $ case zzz of
     Sorted [] -> error "Good jorb"
@@ -191,31 +199,27 @@ backward zzz f = trace (f ++ show zzz) $ case zzz of
         Right (l, r) -> bwd (Merging l r init')
         Left a -> unsorted a
       where
-        nonempty = x :| xs
-        last' = NE.last nonempty
-        init' = NE.init nonempty
+        (init', last') = shift x xs
 
     Merging l r [] -> bwd (SortingRight l (Sorted r))
-    Merging l r (x:xs) -> case (unmerge l r last') of
+    Merging l r (x:xs) -> case unmerge l r last' of
         Right (l', []) -> bwd (Merging l' r init')
         Right ([], r') -> bwd (Merging l r' init')
         Right (l', r') -> Merging l' r' init'
-        Left a -> error "wat"
+        Left _ -> error "wat"
       where
-        nonempty = x :| xs
-        last' = NE.last nonempty
-        init' = NE.init nonempty
+        (init', last') = shift x xs
 
     SortingRight ls (Unsorted rs) -> bwd (SortingLeft (Sorted ls) rs)
     SortingRight ls r -> case bwd' r of
         Unsorted rs' -> bwd (SortingLeft (Sorted ls) rs')
-        newR@(Merging _ _ _) -> SortingRight ls newR
+        newR@Merging{} -> SortingRight ls newR
         newR -> bwd (SortingRight ls newR)
 
     SortingLeft (Unsorted ls) rs -> Unsorted (ls <> rs)
     SortingLeft l rs -> case bwd' l of
         Unsorted ls' -> Unsorted (ls' <> rs)
-        newL@(Merging _ _ _) -> SortingLeft newL rs
+        newL@Merging{} -> SortingLeft newL rs
         newL -> bwd (SortingLeft newL rs)
 
     Unsorted _ -> error "backward Unsorted"
@@ -228,7 +232,7 @@ backward zzz f = trace (f ++ show zzz) $ case zzz of
 
 unmerge l r (S a (L p)) = Right (S a p : l, r)
 unmerge l r (S a (R p)) = Right (l, S a p : r)
-unmerge l r (S a B) = Left a
+unmerge _ _ (S a B) = Left a
 
 -- ##
 -- ## operations we permit the user
@@ -243,9 +247,9 @@ data UserI a where
 
 instance Show a => Show (UserI a) where
     show GetNextStep = "GetNextStep"
-    show (Compare a) = "Compare " ++ (show a)
-    show (Rewrite1 a) = "Rewrite1 " ++ (show a)
-    show (Rewrite2 a) = "Rewrite2 " ++ (show a)
+    show (Compare a) = "Compare " ++ show a
+    show (Rewrite1 a) = "Rewrite1 " ++ show a
+    show (Rewrite2 a) = "Rewrite2 " ++ show a
     show Undo = "Undo"
 
 

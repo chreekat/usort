@@ -1,15 +1,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-orphans #-}
 import Prelude as Pre
 
 import Control.Monad.State
-import Control.Monad
-import Control.Monad.IO.Class
 import Data.List
 import Data.List.NonEmpty as NE hiding (sort, map)
 import Lib
 import Control.Monad.Operational
-import Test.Tasty
 import Test.Tasty.QuickCheck as QC
 import Test.Tasty.TH
 
@@ -47,7 +45,7 @@ pureCompare = forever (getNextStep >>= obvious)
 
 prop_sameSize x xs = ioProperty $ do
     result <- sortFunc chaosCompare (T.pack x :| map T.pack xs)
-    pure ((Pre.length (x:xs)) == Pre.length result)
+    pure (Pre.length (x:xs) == Pre.length result)
 
 prop_sorted x xs = ioProperty $ do
     result <- sortFunc pureCompare (t :| ts)
