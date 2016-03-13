@@ -1,29 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 
 module Lib where
 
+import Prelude hiding (Either(..))
+import qualified Prelude as Pre
+
 import Control.Monad.Operational
 import Control.Monad.State
-import Data.Foldable
+import Data.Foldable as F
 import Data.List.NonEmpty hiding (toList, map, reverse)
 import Data.Semigroup
 import Data.Text (Text)
 import Formatting hiding (left, right)
 import System.Console.Haskeline hiding (replacement)
-import qualified Data.List.NonEmpty as NE
+-- import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
--- import Debug.Trace
+import Debug.Trace
+-- trace = flip const
+-- traceShow = flip const
 
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
 uSort :: [Text] -> IO [Text]
 uSort [] = pure []
-uSort (x:xs) = toList <$> sortFunc userCompare (Unsorted (x :| xs))
+uSort (x:xs) = toList <$> sortFunc userCompare (x :| xs)
 
 class ToNonEmpty m where
     toList' :: m a -> NonEmpty a
@@ -33,64 +39,105 @@ instance ToNonEmpty NonEmpty where
 
 -- | Does a weird even/odd thing, but whatevs
 half :: a -> a -> [a] -> (NonEmpty a, NonEmpty a)
-half x x' = \case
-    [] -> (x :| [], x' :| [])
-    [x''] -> (x :| [], x' :| [x''])
-    (z:z':zs) -> let (h,h') = half z z' zs
-                 in (x <| h, x' <| h')
+half one two rest =
+    let halfLength = ((F.length rest + 2) `div` 2) - 2
+        (left, right) = Pre.splitAt halfLength rest
+    in case (left, right) of
+        ([], []) -> (one :| [], two :| [])
+        (xs, []) -> (one :| [], two :| xs)
+        (xs, (y:ys)) -> (one :| two : xs, y :| ys)
 
-data Merge a = PickLeft a
-             | PickRight a
-             | SkipLeft (NonEmpty a)
-             | SkipRight (NonEmpty a)
-             deriving Show
+data Provenance
+        = L Provenance
+        | R Provenance
+        | B
+        deriving (Show)
 
-instance ToNonEmpty Merge where
-    toList' = \case
-        PickLeft a -> a :| []
-        PickRight a -> a :| []
-        SkipLeft ne -> ne
-        SkipRight ne -> ne
+data Sorted a = S { val :: a, prov :: Provenance }
+        deriving (Show, Functor)
 
-instance Foldable Merge where
-    foldMap f = \case
-        PickLeft a -> f a
-        PickRight a -> f a
-        SkipLeft (a :| as) -> mconcat (f a : map f as)
-        SkipRight (a :| as) -> mconcat (f a : map f as)
+fromLeft, fromRight :: Sorted a -> Sorted a
+fromLeft (S a p) = S a (L p)
+fromRight (S a p) = S a (R p)
 
 data SortState a
         = Unsorted (NonEmpty a)
-        | SortingLeft
-        | SortingRight
-        | Merging
+        | SortingLeft (SortState a) (NonEmpty a)
+        | SortingRight [Sorted a] (SortState a)
+        | Merging [Sorted a] [Sorted a] [Sorted a]
+        | Sorted [Sorted a]
+        deriving (Show)
 
-        -- | Unsorted (NonEmpty a)
-        -- | SortingLeft (SortTree a) (NonEmpty (Merge a)) (NonEmpty a)
-        -- | SortingRight (SortTree a) (SortTree a) (NonEmpty (Merge a)) (NonEmpty a)
-        -- | Merging (SortTree a) (SortTree a) (NonEmpty (Merge a))
+sortFunc :: User IO [Text] -> NonEmpty Text -> IO [Text]
+sortFunc user xs = do
+    f <- forward user (Unsorted xs)
+    case f of
+        Sorted ys -> return (map val ys)
+        _ -> sortFunc user xs
 
-data SortTree a
-        = Single a
-        | STree
-            { sortL :: SortTree a
-            , sortR :: SortTree a
-            , merges :: NonEmpty (Merge a)
-            }
-        deriving Show
+forward :: User IO [Text] -> SortState Text -> IO (SortState Text)
+forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
+    Sorted _ -> pure zzz
+    Unsorted (x :| xs) -> case xs of
+        [] -> pure (Sorted [S x B])
+        (x':xs') ->
+            let (left, right) = half x x' xs'
+            in fwd (SortingLeft (Unsorted left) right)
 
-instance ToNonEmpty SortTree where
-    toList' = \case
-        Single a -> a :| []
-        STree _ _ ms -> sconcat (fmap toList' (NE.reverse ms))
+    SortingLeft (Sorted ls) rs -> fwd (SortingRight ls (Unsorted rs))
+    SortingLeft l rs -> trace "ASCEND" fwd =<< SortingLeft <$> fwd' l <*> pure rs
 
-instance Foldable SortTree where
-    foldMap f = \case
-        Single a -> f a
-        STree _ _ ms -> foldMap f (sconcat (fmap toList' (NE.reverse ms)))
+    SortingRight ls (Sorted rs) -> fwd (Merging ls rs [])
+    SortingRight ls r -> trace "ASCEND" fwd =<< SortingRight <$> pure ls <*> fwd' r
 
-sortFunc :: User IO [Text] -> SortState Text -> IO (NonEmpty Text)
-sortFunc = undefined
+    Merging [] rs xs -> pure (Sorted (xs ++ map fromRight rs))
+    Merging ls [] xs -> pure (Sorted (xs ++ map fromLeft ls))
+    Merging (l:ls) (r:rs) xs -> eval =<< viewT user
+      where
+        eval = \case
+            Return _ -> error "Inconceivable"
+            GetNextStep :>>= k -> forward (k (66, 88, val l, val r)) zzz
+            Rewrite1 l' :>>= k -> forward (k ()) (Merging ((l' <$ l) : ls) (r:rs) xs)
+            Rewrite2 r' :>>= k -> forward (k ()) (Merging (l:ls) ((r' <$ r) : rs) xs)
+            Compare o :>>= k -> case (o, ls, rs) of
+                (LT, [], _) -> forward (k ()) (Sorted xs')
+                  where xs' = xs ++ [fromLeft l] ++ (map fromRight (r:rs))
+                (LT, _, _) -> forward (k ()) (Merging ls (r:rs) xs')
+                  where xs' = xs ++ [fromLeft l]
+                (_ , _, []) -> forward (k ()) (Sorted xs')
+                  where xs' = xs ++ [fromRight r] ++ (map fromLeft (l:ls))
+                (_ , _, _) -> forward (k ()) (Merging (l:ls) rs xs')
+                  where xs' = xs ++ [fromRight r]
+            Undo :>>= k -> forward (k ()) =<< bwd zzz
+  where
+    fwd' = trace "DESCEND" fwd
+    fwd = forward user
+    bwd = backward user
+
+backward :: User IO [Text] -> SortState Text -> IO (SortState Text)
+backward user zzz = trace ("Bwd | " ++ show zzz) $ case zzz of
+    Unsorted _ -> error "backward Unsorted"
+
+    SortingLeft (Unsorted ls) rs -> fwd (Unsorted (ls <> rs))
+    SortingLeft l rs -> trace "ASCEND" fwd =<< SortingLeft <$> (bwd' l) <*> pure rs
+
+    SortingRight ls (Unsorted rs) -> bwd (SortingLeft (Sorted ls) rs)
+    SortingRight ls r -> trace "ASCEND" fwd =<< SortingRight <$> pure ls <*> bwd' r
+
+    Merging l r [] -> bwd (SortingRight l (Sorted r))
+    Merging l r (x:xs) -> case (unmerge l r x) of
+        (l', []) -> bwd (Merging l' r xs)
+        ([], r') -> bwd (Merging l r' xs)
+        (l', r') -> fwd (Merging l' r' xs)
+
+  where
+    fwd = forward user
+    bwd' = trace "DESCEND" bwd
+    bwd = backward user
+
+unmerge l r (S a (L p)) = (S a p : l, r)
+unmerge l r (S a (R p)) = (l, S a p : r)
+unmerge l r (S a B) = error "no wat"
 
 -- ##
 -- ## operations we permit the user
@@ -128,13 +175,13 @@ unknownCommand cont = do
     liftIO $ putStrLn "Unknown command. Let's try again."
     cont
 
-editItem :: Text -> Text -> IO (Either Text Text)
+editItem :: Text -> Text -> IO (Pre.Either Text Text)
 editItem x y = do
     putStr "Which item? > "
     c <- getResponse
     case c of
-        '1' -> Left  <$> replaceText x
-        '2' -> Right <$> replaceText y
+        '1' -> Pre.Left  <$> replaceText x
+        '2' -> Pre.Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
 replaceText t = do
