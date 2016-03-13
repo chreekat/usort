@@ -6,7 +6,7 @@
 
 module Lib where
 
-import Prelude hiding (Either(..))
+import Prelude
 import qualified Prelude as Pre
 
 import Control.Monad.Operational
@@ -17,7 +17,7 @@ import Data.Semigroup
 import Data.Text (Text)
 import Formatting hiding (left, right)
 import System.Console.Haskeline hiding (replacement)
--- import qualified Data.List.NonEmpty as NE
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -50,15 +50,21 @@ half one two rest =
 data Provenance
         = L Provenance
         | R Provenance
-        | B
+        | BP
         deriving (Show)
 
-data Sorted a = S { val :: a, prov :: Provenance }
+data Sorted a = B a
+              | S a Provenance
         deriving (Show, Functor)
+
+val (B a) = a
+val (S a _) = a
 
 fromLeft, fromRight :: Sorted a -> Sorted a
 fromLeft (S a p) = S a (L p)
+fromLeft (B a) = S a (L BP)
 fromRight (S a p) = S a (R p)
+fromRight (B a) = S a (R BP)
 
 data SortState a
         = Unsorted (NonEmpty a)
@@ -79,7 +85,7 @@ forward :: User IO [Text] -> SortState Text -> IO (SortState Text)
 forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
     Sorted _ -> pure zzz
     Unsorted (x :| xs) -> case xs of
-        [] -> pure (Sorted [S x B])
+        [] -> pure (Sorted [B x])
         (x':xs') ->
             let (left, right) = half x x' xs'
             in fwd (SortingLeft (Unsorted left) right)
@@ -108,36 +114,55 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
                   where xs' = xs ++ [fromRight r] ++ (map fromLeft (l:ls))
                 (_ , _, _) -> forward (k ()) (Merging (l:ls) rs xs')
                   where xs' = xs ++ [fromRight r]
-            Undo :>>= k -> forward (k ()) =<< bwd zzz
+            Undo :>>= k -> forward (k ()) (backward zzz)
   where
     fwd' = trace "DESCEND" fwd
     fwd = forward user
-    bwd = backward user
 
-backward :: User IO [Text] -> SortState Text -> IO (SortState Text)
-backward user zzz = trace ("Bwd | " ++ show zzz) $ case zzz of
+backward :: SortState Text -> SortState Text
+backward zzz = trace ("Bwd | " ++ show zzz) $ case zzz of
     Unsorted _ -> error "backward Unsorted"
 
-    SortingLeft (Unsorted ls) rs -> fwd (Unsorted (ls <> rs))
-    SortingLeft l rs -> trace "ASCEND" fwd =<< SortingLeft <$> (bwd' l) <*> pure rs
+    SortingLeft (Unsorted ls) rs -> Unsorted (ls <> rs)
+    SortingLeft l rs -> case bwd' l of
+        Unsorted ls' -> Unsorted (ls' <> rs)
+        newL@(Merging _ _ _) -> SortingLeft newL rs
+        newL -> bwd (SortingLeft newL rs)
 
     SortingRight ls (Unsorted rs) -> bwd (SortingLeft (Sorted ls) rs)
-    SortingRight ls r -> trace "ASCEND" fwd =<< SortingRight <$> pure ls <*> bwd' r
+    SortingRight ls r -> case bwd' r of
+        Unsorted rs' -> bwd (SortingLeft (Sorted ls) rs')
+        newR@(Merging _ _ _) -> SortingRight ls newR
+        newR -> bwd (SortingRight ls newR)
 
     Merging l r [] -> bwd (SortingRight l (Sorted r))
-    Merging l r (x:xs) -> case (unmerge l r x) of
-        (l', []) -> bwd (Merging l' r xs)
-        ([], r') -> bwd (Merging l r' xs)
-        (l', r') -> fwd (Merging l' r' xs)
+    Merging l r (x:xs) -> case (unmerge l r last') of
+        Right (l', []) -> bwd (Merging l' r init')
+        Right ([], r') -> bwd (Merging l r' init')
+        Right (l', r') -> Merging l' r' init'
+        Left a -> error "wat"
+      where
+        nonempty = x :| xs
+        last' = NE.last nonempty
+        init' = NE.init nonempty
 
+    Sorted [] -> error "Good jorb"
+    Sorted (x:xs) -> case unmerge [] [] last' of
+        Right (l, r) -> bwd (Merging l r init')
+        Left a -> unsorted a
+      where
+        nonempty = x :| xs
+        last' = NE.last nonempty
+        init' = NE.init nonempty
   where
-    fwd = forward user
+    unsorted = Unsorted . (:| [])
     bwd' = trace "DESCEND" bwd
-    bwd = backward user
+    bwd = backward
 
-unmerge l r (S a (L p)) = (S a p : l, r)
-unmerge l r (S a (R p)) = (l, S a p : r)
-unmerge l r (S a B) = error "no wat"
+unmerge l r (S a (L p)) = Right (S a p : l, r)
+unmerge l r (S a (R p)) = Right (l, S a p : r)
+unmerge l r (S a BP) = Left a
+unmerge l r (B a) = Left a
 
 -- ##
 -- ## operations we permit the user
