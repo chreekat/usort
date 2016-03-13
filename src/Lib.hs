@@ -21,9 +21,10 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Debug.Trace
--- trace = flip const
--- traceShow = flip const
+-- import Debug.Trace
+trace :: String -> a -> a
+trace = flip const
+traceShow = flip const
 
 -- | Given a list of items, use merge sort where the sort function is YOU
 -- :D
@@ -50,21 +51,24 @@ half one two rest =
 data Provenance
         = L Provenance
         | R Provenance
-        | BP
-        deriving (Show)
+        | B
 
-data Sorted a = B a
-              | S a Provenance
-        deriving (Show, Functor)
+instance Show Provenance where
+    show B = "B"
+    show (L p) = "L:" ++ show p
+    show (R p) = "R:" ++ show p
 
-val (B a) = a
+data Sorted a = S a Provenance
+        deriving (Functor)
+
+instance Show a => Show (Sorted a) where
+    show (S a p) = show a ++ ":" ++ show p
+
 val (S a _) = a
 
 fromLeft, fromRight :: Sorted a -> Sorted a
 fromLeft (S a p) = S a (L p)
-fromLeft (B a) = S a (L BP)
 fromRight (S a p) = S a (R p)
-fromRight (B a) = S a (R BP)
 
 data SortState a
         = Unsorted (NonEmpty a)
@@ -72,32 +76,48 @@ data SortState a
         | SortingRight [Sorted a] (SortState a)
         | Merging [Sorted a] [Sorted a] [Sorted a]
         | Sorted [Sorted a]
-        deriving (Show)
+
+instance Show a => Show (SortState a) where
+    show (Unsorted xs) = "Unsorted " ++ show (toList xs)
+    show (SortingLeft l rs) =
+        "SortingLeft ╞" ++ show l ++ "╡ " ++ show (toList rs)
+    show (SortingRight l r) =
+        "SortingRight ╞" ++ show l ++ "╡ ╞" ++ show r ++ "╡"
+    show (Merging ls rs results) =
+        "Merging " ++ show ls ++ " " ++ show rs ++ " " ++ show results
+    show (Sorted ls) = "Sorted " ++ show ls
 
 sortFunc :: User IO [Text] -> NonEmpty Text -> IO [Text]
-sortFunc user xs = do
-    f <- forward user (Unsorted xs)
-    case f of
-        Sorted ys -> return (map val ys)
-        _ -> sortFunc user xs
+sortFunc user xs = go (Unsorted xs)
+  where
+    go step = do
+        f <- forward user step
+        trace "PIP!" $ case f of
+            Just (Sorted ys) -> return (map val ys)
+            Just (next) -> go next
+            Nothing -> go (trace "NO IDEA LOL" (backward step "Bwd | "))
 
-forward :: User IO [Text] -> SortState Text -> IO (SortState Text)
+forward :: User IO [Text] -> SortState Text -> IO (Maybe (SortState Text))
 forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
-    Sorted _ -> pure zzz
+    Sorted _ -> go zzz
     Unsorted (x :| xs) -> case xs of
-        [] -> pure (Sorted [B x])
+        [] -> go (Sorted [S x B])
         (x':xs') ->
             let (left, right) = half x x' xs'
-            in fwd (SortingLeft (Unsorted left) right)
+            in go (SortingLeft (Unsorted left) right)
 
-    SortingLeft (Sorted ls) rs -> fwd (SortingRight ls (Unsorted rs))
-    SortingLeft l rs -> trace "ASCEND" fwd =<< SortingLeft <$> fwd' l <*> pure rs
+    SortingLeft (Sorted ls) rs -> go (SortingRight ls (Unsorted rs))
+    SortingLeft l rs -> do
+        newL <- fwd' l
+        pure (SortingLeft <$> newL <*> pure rs)
 
-    SortingRight ls (Sorted rs) -> fwd (Merging ls rs [])
-    SortingRight ls r -> trace "ASCEND" fwd =<< SortingRight <$> pure ls <*> fwd' r
+    SortingRight ls (Sorted rs) -> go (Merging ls rs [])
+    SortingRight ls r -> do
+        newR <- fwd' r
+        pure (SortingRight <$> pure ls <*> newR)
 
-    Merging [] rs xs -> pure (Sorted (xs ++ map fromRight rs))
-    Merging ls [] xs -> pure (Sorted (xs ++ map fromLeft ls))
+    Merging [] rs xs -> go (Sorted (xs ++ map fromRight rs))
+    Merging ls [] xs -> go (Sorted (xs ++ map fromLeft ls))
     Merging (l:ls) (r:rs) xs -> eval =<< viewT user
       where
         eval = \case
@@ -114,26 +134,27 @@ forward user zzz = trace ("Fwd | " ++ show zzz) $ case zzz of
                   where xs' = xs ++ [fromRight r] ++ (map fromLeft (l:ls))
                 (_ , _, _) -> forward (k ()) (Merging (l:ls) rs xs')
                   where xs' = xs ++ [fromRight r]
-            Undo :>>= k -> forward (k ()) (backward zzz)
+            Undo :>>= k -> trace "UNDONE :(" $ back zzz
+              where
+                back zzz = case (backward zzz "Bwd | ") of
+                    (Unsorted xs) -> pure Nothing
+                    prev -> forward (k ()) prev
   where
-    fwd' = trace "DESCEND" fwd
-    fwd = forward user
+    go = pure . Just
+    fwd' = forward user
+    -- fwd' x = (trace "DESCEND" (forward user) x) <* trace "ASCEND" (pure ())
 
-backward :: SortState Text -> SortState Text
-backward zzz = trace ("Bwd | " ++ show zzz) $ case zzz of
-    Unsorted _ -> error "backward Unsorted"
-
-    SortingLeft (Unsorted ls) rs -> Unsorted (ls <> rs)
-    SortingLeft l rs -> case bwd' l of
-        Unsorted ls' -> Unsorted (ls' <> rs)
-        newL@(Merging _ _ _) -> SortingLeft newL rs
-        newL -> bwd (SortingLeft newL rs)
-
-    SortingRight ls (Unsorted rs) -> bwd (SortingLeft (Sorted ls) rs)
-    SortingRight ls r -> case bwd' r of
-        Unsorted rs' -> bwd (SortingLeft (Sorted ls) rs')
-        newR@(Merging _ _ _) -> SortingRight ls newR
-        newR -> bwd (SortingRight ls newR)
+backward :: SortState Text -> String -> SortState Text
+backward zzz f = trace (f ++ show zzz) $ case zzz of
+    Sorted [] -> error "Good jorb"
+    Sorted [x] -> Unsorted (val x :| [])
+    Sorted (x:xs) -> case unmerge [] [] last' of
+        Right (l, r) -> bwd (Merging l r init')
+        Left a -> unsorted a
+      where
+        nonempty = x :| xs
+        last' = NE.last nonempty
+        init' = NE.init nonempty
 
     Merging l r [] -> bwd (SortingRight l (Sorted r))
     Merging l r (x:xs) -> case (unmerge l r last') of
@@ -146,23 +167,29 @@ backward zzz = trace ("Bwd | " ++ show zzz) $ case zzz of
         last' = NE.last nonempty
         init' = NE.init nonempty
 
-    Sorted [] -> error "Good jorb"
-    Sorted (x:xs) -> case unmerge [] [] last' of
-        Right (l, r) -> bwd (Merging l r init')
-        Left a -> unsorted a
-      where
-        nonempty = x :| xs
-        last' = NE.last nonempty
-        init' = NE.init nonempty
+    SortingRight ls (Unsorted rs) -> bwd (SortingLeft (Sorted ls) rs)
+    SortingRight ls r -> case bwd' r of
+        Unsorted rs' -> bwd (SortingLeft (Sorted ls) rs')
+        newR@(Merging _ _ _) -> SortingRight ls newR
+        newR -> bwd (SortingRight ls newR)
+
+    SortingLeft (Unsorted ls) rs -> Unsorted (ls <> rs)
+    SortingLeft l rs -> case bwd' l of
+        Unsorted ls' -> Unsorted (ls' <> rs)
+        newL@(Merging _ _ _) -> SortingLeft newL rs
+        newL -> bwd (SortingLeft newL rs)
+
+    Unsorted _ -> error "backward Unsorted"
+
   where
     unsorted = Unsorted . (:| [])
-    bwd' = trace "DESCEND" bwd
-    bwd = backward
+    bwd' = flip backward ">>> | "
+    -- bwd' = backward
+    bwd = flip backward "... | "
 
 unmerge l r (S a (L p)) = Right (S a p : l, r)
 unmerge l r (S a (R p)) = Right (l, S a p : r)
-unmerge l r (S a BP) = Left a
-unmerge l r (B a) = Left a
+unmerge l r (S a B) = Left a
 
 -- ##
 -- ## operations we permit the user
