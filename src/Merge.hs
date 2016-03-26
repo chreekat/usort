@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-module Merge (merge, MergeFail(..), CmpT(..)) where
+module Merge (merge, MergeFail(..), CmpT(..), CmpI(..)) where
 
 import Control.Error
 import Control.Monad.Operational
@@ -31,8 +31,6 @@ merge l r = do
         Nothing -> do
             liftIO (putMVar mvar Nothing)
             throwE (MergeEnded (l ++ r))
-
-fuzz = undefined
 
 go :: ( Show a
       , t ~ ExceptT (MergeFail a) IO)
@@ -74,7 +72,7 @@ go p mvar left right result = traceShow (left,right) $ case (left, right) of
                 go (k ()) mvar (r : rs) (S x p : r : rs) ress
             _ -> do
                 putProg (k ())
-                throwE (Unmerged (r : rs) (l : ls))
+                throwE (Unmerged (l : ls) (r : rs))
     putProg p = liftIO $ putMVar mvar (Just p)
     putNoProg = liftIO $ putMVar mvar Nothing
 

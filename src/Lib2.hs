@@ -15,9 +15,15 @@ import Control.Error
 import Sorted
 import Merge
 
-data SortFail a = SortEnded
+import Debug.Trace
+
+data SortFail a = SortEnded [Sorted a]
                 | Unsorted [a]
     deriving (Show)
+
+usort p xs = do
+    mv <- newMVar (Just p)
+    runReaderT (runExceptT (sortFunc xs)) mv
 
 -- sortFunc :: ( tOuter ~ ExceptT (MergeFail a) mOuter
 --             , tInner ~ ExceptT (MergeFail a) IO
@@ -49,17 +55,18 @@ goRight l h2 = do
 --         -> tOuter [Sorted a]
 goMerge l r = merge l r `catchE` retryRight
   where
-    retryRight (MergeEnded _) = undefined
+    retryRight (MergeEnded xs) = throwE (SortEnded xs)
     retryRight (Unmerged failLeft failRight) = do
         r' <- resort failRight `catchE` retryLeft failLeft
         goMerge failLeft r'
 
-retryLeft _ SortEnded = undefined
+retryLeft l (SortEnded xs) = throwE (SortEnded (l ++ xs))
 retryLeft l (Unsorted right) = do
     l' <- withExceptT (appendRight right) (resort l)
     goRight l' right
   where
-    appendRight _ SortEnded = SortEnded
+    appendRight _ (SortEnded _) = error "appendRight SortEnded"
     appendRight rs (Unsorted xs) = Unsorted (xs ++ rs)
 
-resort = undefined
+resort [x] = throwE (Unsorted [(val x)])
+resort xs = traceShow xs $ error "resort"
