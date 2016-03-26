@@ -53,9 +53,9 @@ go p mvar left right result = traceShow (left,right) $ case (left, right) of
     (l:ls,r:rs) -> eval (l :| ls) (r :| rs) =<< viewT p
   where
     eval (l :| ls) (r :| rs) = \case
-        Return x -> do
+        Return _ -> do
             putNoProg
-            throwE (MergeEnded ((l:ls) ++ (r:rs) ++ result))
+            throwE (MergeEnded (result ++ (l:ls) ++ (r:rs)))
         GetNextStep :>>= k ->
             go (k (66, 88, val l, val r)) mvar (l : ls) (r : rs) result
         Rewrite1 newLeft :>>= k ->

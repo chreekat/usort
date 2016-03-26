@@ -23,7 +23,7 @@ data SortFail a = SortEnded [Sorted a]
 
 usort p xs = do
     mv <- newMVar (Just p)
-    runReaderT (runExceptT (sortFunc xs)) mv
+    runReaderT (sortFunc xs) mv
 
 -- sortFunc :: ( tOuter ~ ExceptT (MergeFail a) mOuter
 --             , tInner ~ ExceptT (MergeFail a) IO
@@ -32,41 +32,46 @@ usort p xs = do
 --             , MonadReader (MVar (Maybe (CmpT a tInner b))) mOuter)
 --          => [a]
 --          -> tOuter [Sorted a]
-sortFunc [] = pure []
-sortFunc [x] = pure [S x B]
+sortFunc [] = pure (Right [])
+sortFunc [x] = pure (Right [S x B])
 sortFunc xs = do
-    l <- sortFunc h1 -- fail immediately if left sort fails
-    goRight l h2
+    el <- sortFunc h1
+    case el of
+        Left (SortEnded ls) -> traceShow ls $ error "l SortEnded"
+        Left (Unsorted ls) -> pure (Left (Unsorted (ls ++ h2)))
+        Right l -> goRight l h2
   where
     (h1, h2) = splitAt half xs
     half = length xs `div` 2
 
 goRight l h2 = do
-    r <- sortFunc h2 `catchE` retryLeft l
-    goMerge l r
+            er <- sortFunc h2
+            case er of
+                Left (SortEnded rs) -> pure (Left (SortEnded (l ++ rs)))
+                Left (Unsorted rs) -> do
+                    -- Left is sorted, right failed to sort.
+                    el' <- resort l
+                    case el' of
+                        Left (SortEnded ls') -> traceShow ls' $ error "l resort SortEnded"
+                        Left (Unsorted ls') -> pure (Left (Unsorted (ls' ++ rs)))
+                        Right l' -> goRight l' rs
+                Right r -> goMerge l r
 
--- goMerge :: ( tOuter ~ ExceptT (SortFail a) mOuter
---            , tInner ~ ExceptT (MergeFail a) IO
---            , Show a
---            , MonadIO mOuter
---            , MonadReader (MVar (Maybe (CmpT a tInner b))) mOuter)
---         => [Sorted a]
---         -> [Sorted a]
---         -> tOuter [Sorted a]
-goMerge l r = merge l r `catchE` retryRight
-  where
-    retryRight (MergeEnded xs) = throwE (SortEnded xs)
-    retryRight (Unmerged failLeft failRight) = do
-        r' <- resort failRight `catchE` retryLeft failLeft
-        goMerge failLeft r'
+goMerge l r = do
+                    em <- runExceptT (merge l r)
+                    case em of
+                        Left (MergeEnded xs) -> pure (Left (SortEnded xs))
+                        Left (Unmerged l' r') -> do
+                            er' <- resort r'
+                            case er' of
+                                Left (SortEnded rs') -> error "r' resort SortEnded"
+                                Left (Unsorted rs') -> do
+                                    el'' <- resort l'
+                                    case el'' of
+                                        Left (SortEnded ls'') -> error "l'' resort ended"
+                                        Left (Unsorted ls'') -> pure (Left (Unsorted (ls'' ++ rs')))
+                                        Right l'' -> goRight l'' rs'
+                                Right r'' -> goMerge l' r''
+                        Right sorted -> pure (Right sorted)
 
-retryLeft l (SortEnded xs) = throwE (SortEnded (l ++ xs))
-retryLeft l (Unsorted right) = do
-    l' <- withExceptT (appendRight right) (resort l)
-    goRight l' right
-  where
-    appendRight _ (SortEnded _) = error "appendRight SortEnded"
-    appendRight rs (Unsorted xs) = Unsorted (xs ++ rs)
-
-resort [x] = throwE (Unsorted [(val x)])
-resort xs = traceShow xs $ error "resort"
+resort sorted = traceShow sorted $ error "resort"
