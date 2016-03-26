@@ -14,7 +14,6 @@ instance Show Provenance where
     show (L p) = "L:" ++ show p
     show (R p) = "R:" ++ show p
 
-
 data Sorted a = S a Provenance
     deriving (Functor)
 

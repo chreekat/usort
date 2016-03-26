@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-module Merge (merge) where
+module Merge (merge, MergeFail(..), CmpT(..)) where
 
 import Control.Error
 import Control.Monad.Operational
@@ -16,8 +16,8 @@ import Debug.Trace
 import Sorted
 
 merge :: ( Show a
-         , tOuter ~ ExceptT (SortFail a) mOuter
-         , tInner ~ ExceptT (SortFail a) IO
+         , tOuter ~ ExceptT (MergeFail a) mOuter
+         , tInner ~ ExceptT (MergeFail a) IO
          , MonadReader (MVar (Maybe (CmpT a tInner b))) mOuter
          , MonadIO mOuter)
       => [Sorted a]
@@ -30,12 +30,12 @@ merge l r = do
         Just prog -> ExceptT (liftIO (runExceptT (go prog mvar l r [])))
         Nothing -> do
             liftIO (putMVar mvar Nothing)
-            throwE (ProgramEnded l r [])
+            throwE (MergeEnded (l ++ r))
 
 fuzz = undefined
 
 go :: ( Show a
-      , t ~ ExceptT (SortFail a) IO)
+      , t ~ ExceptT (MergeFail a) IO)
    => CmpT a t b
    -> MVar (Maybe (CmpT a t b))
    -> [Sorted a]
@@ -57,7 +57,7 @@ go p mvar left right result = traceShow (left,right) $ case (left, right) of
     eval (l :| ls) (r :| rs) = \case
         Return x -> do
             putNoProg
-            throwE (ProgramEnded (l:ls) (r:rs) result)
+            throwE (MergeEnded ((l:ls) ++ (r:rs) ++ result))
         GetNextStep :>>= k ->
             go (k (66, 88, val l, val r)) mvar (l : ls) (r : rs) result
         Rewrite1 newLeft :>>= k ->
@@ -74,7 +74,7 @@ go p mvar left right result = traceShow (left,right) $ case (left, right) of
                 go (k ()) mvar (r : rs) (S x p : r : rs) ress
             _ -> do
                 putProg (k ())
-                throwE (ComparisonCatastrophe (r : rs) (l : ls))
+                throwE (Unmerged (r : rs) (l : ls))
     putProg p = liftIO $ putMVar mvar (Just p)
     putNoProg = liftIO $ putMVar mvar Nothing
 
@@ -87,6 +87,6 @@ data CmpI v a where
     Rewrite2    :: v -> CmpI v ()
     Undo        :: CmpI v ()
 
-data SortFail a = ProgramEnded [Sorted a] [Sorted a] [Sorted a]
-                | ComparisonCatastrophe [Sorted a] [Sorted a]
-                deriving (Show)
+data MergeFail a = MergeEnded [Sorted a]
+                 | Unmerged [Sorted a] [Sorted a]
+                 deriving (Show)
