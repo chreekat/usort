@@ -30,6 +30,9 @@ import Merge
 -- idempotent.
 -- 5. For that matter, return should just return the list as is! :)
 
+instance Arbitrary Text where
+    arbitrary = T.pack <$> listOf (elements ['a'..'z'])
+
 newtype ChaosCompare = CC (MrgI Text ())
 
 instance Arbitrary ChaosCompare where
@@ -65,26 +68,24 @@ finishSort fn xs = do
             Right xs' -> pure xs'
 
 prop_sameSize xs = ioProperty $ do
-    result <- finishSort chaosCompare ts
+    result <- finishSort chaosCompare xs
     pure (Pre.length xs == Pre.length result)
-  where
-    ts = map T.pack xs
 
 prop_sorted xs = ioProperty $ do
-    result <- finishSort pureCompare ts
-    pure (sort ts == map val result)
+    result <- finishSort pureCompare xs
+    pure (sort xs == map val result)
   where
-    ts = map T.pack xs
+    types = xs :: [Text]
 
 prop_return xs = ioProperty $ do
-    result <- runSort (return ()) ts
+    result <- runSort (return ()) xs
     pure $ collect (length xs) $ go result xs
   where
     go result xs
         | length xs < 2 = result == Right base
         | otherwise     = result == Left (SortEnded base)
-    base = map (\x -> S x B) ts
-    ts = map T.pack xs
+    base = map (\x -> S x B) xs
+    types = xs :: [Text]
 
 -- Just gonna brainstorm some tests here. Maybe start with a list, do one
 -- compare that swaps two elements (I forget if it's GT or LT that would do
