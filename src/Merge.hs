@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-module Merge (merge, MergeFail(..), CmpT(..), CmpI(..)) where
+module Merge (merge, MergeFail(..), MrgT(..), MrgI(..)) where
 
 import Control.Error
 import Control.Monad.Operational
@@ -16,46 +16,46 @@ import Debug.Trace
 import Sorted
 
 merge :: ( Show a
-         , tOuter ~ ExceptT (MergeFail a) mOuter
-         , tInner ~ ExceptT (MergeFail a) IO
-         , MonadReader (MVar (Maybe (CmpT a tInner b))) mOuter
+         , MonadReader (MVar (Maybe (MrgT a IO b))) mOuter
          , MonadIO mOuter)
       => [Sorted a]
       -> [Sorted a]
-      -> tOuter [Sorted a]
+      -> mOuter (Either (MergeFail a) [Sorted a])
 merge l r = do
-    mvar <- lift ask
+    mvar <- ask
     mprog <- liftIO (takeMVar mvar)
     case mprog of
-        Just prog -> ExceptT (liftIO (runExceptT (go prog mvar l r [])))
+        Just prog -> liftIO (go prog mvar l r [])
         Nothing -> do
             liftIO (putMVar mvar Nothing)
-            throwE (MergeEnded (l ++ r))
+            pure (Left (MergeEnded (l ++ r)))
 
-go :: ( Show a
-      , t ~ ExceptT (MergeFail a) IO)
-   => CmpT a t b
-   -> MVar (Maybe (CmpT a t b))
+-- | We must use MVar, and not e.g. State, because the MrgT value needs to
+-- be in the "left side" (positive? Negative? I forget the term) to avoid a
+-- infinitely-recursing type. Similarly, we must concretely use IO.
+go :: ( Show a )
+   => MrgT a IO b
+   -> MVar (Maybe (MrgT a IO b))
    -> [Sorted a]
    -> [Sorted a]
    -> [Sorted a]
-   -> t [Sorted a]
-go p mvar left right result = traceShow (left,right) $ case (left, right) of
+   -> IO (Either (MergeFail a) [Sorted a])
+go p mvar left right result = case (left, right) of
     ([],[]) -> do
         putProg p
-        pure result
+        pure (Right result)
     (ls,[]) -> do
         putProg p
-        pure (result ++ map fromLeft ls)
+        pure (Right (result ++ map fromLeft ls))
     ([],rs) -> do
         putProg p
-        pure (result ++ map fromRiht rs)
+        pure (Right ((result ++ map fromRiht rs)))
     (l:ls,r:rs) -> eval (l :| ls) (r :| rs) =<< viewT p
   where
     eval (l :| ls) (r :| rs) = \case
         Return _ -> do
             putNoProg
-            throwE (MergeEnded (result ++ (l:ls) ++ (r:rs)))
+            pure (Left (MergeEnded (result ++ (l:ls) ++ (r:rs))))
         GetNextStep :>>= k ->
             go (k (66, 88, val l, val r)) mvar (l : ls) (r : rs) result
         Rewrite1 newLeft :>>= k ->
@@ -72,18 +72,18 @@ go p mvar left right result = traceShow (left,right) $ case (left, right) of
                 go (k ()) mvar (r : rs) (S x p : r : rs) ress
             _ -> do
                 putProg (k ())
-                throwE (Unmerged (l : ls) (r : rs))
+                pure (Left (Unmerged (l : ls) (r : rs)))
     putProg p = liftIO $ putMVar mvar (Just p)
     putNoProg = liftIO $ putMVar mvar Nothing
 
-type CmpT v m a = ProgramT (CmpI v) m a
+type MrgT v m a = ProgramT (MrgI v) m a
 
-data CmpI v a where
-    GetNextStep :: CmpI v (Int, Int, v, v)
-    Compare     :: Ordering -> CmpI v ()
-    Rewrite1    :: v -> CmpI v ()
-    Rewrite2    :: v -> CmpI v ()
-    Undo        :: CmpI v ()
+data MrgI v a where
+    GetNextStep :: MrgI v (Int, Int, v, v)
+    Compare     :: Ordering -> MrgI v ()
+    Rewrite1    :: v -> MrgI v ()
+    Rewrite2    :: v -> MrgI v ()
+    Undo        :: MrgI v ()
 
 data MergeFail a = MergeEnded [Sorted a]
                  | Unmerged [Sorted a] [Sorted a]

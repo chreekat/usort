@@ -60,7 +60,7 @@ redoLeft l rs = do
         Right l' -> goRight l' rs
 
 goMerge l r = do
-    em <- runExceptT (merge l r)
+    em <- merge l r
     case em of
         Left (MergeEnded xs) -> pure (Left (SortEnded xs))
         Left (Unmerged l' r') -> do
