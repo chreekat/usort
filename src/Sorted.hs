@@ -8,6 +8,7 @@ data Provenance
         = L Provenance
         | R Provenance
         | B
+    deriving (Eq)
 
 instance Show Provenance where
     show B = "B"
@@ -15,7 +16,7 @@ instance Show Provenance where
     show (R p) = "R:" ++ show p
 
 data Sorted a = S a Provenance
-    deriving (Functor)
+    deriving (Functor, Eq)
 
 instance Show a => Show (Sorted a) where
     show (S a p) = show a ++ ":" ++ show p

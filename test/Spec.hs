@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-orphans #-}
@@ -9,10 +10,10 @@ import Control.Concurrent
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.List
-import Data.List.NonEmpty as NE hiding (sort, map)
 import Control.Monad.Operational
 import Test.Tasty.QuickCheck as QC
 import Test.Tasty.TH
+import Data.Text (Text)
 
 import qualified Data.Text as T
 
@@ -29,10 +30,10 @@ import Merge
 -- idempotent.
 -- 5. For that matter, return should just return the list as is! :)
 
-newtype ChaosCompare v m a = CC (CmpT v m a)
+newtype ChaosCompare = CC (MrgI Text ())
 
-instance Arbitrary (ChaosCompare v m a) where
-    arbitrary = forever $ frequency
+instance Arbitrary ChaosCompare where
+    arbitrary = CC <$> frequency
         [(3, pure (Compare LT))
         ,(3, pure (Compare GT))
         ,(1, pure Undo)
@@ -40,9 +41,11 @@ instance Arbitrary (ChaosCompare v m a) where
         ,(1, (Rewrite2 . T.pack) <$> arbitrary)
         ]
 
-pureCompare :: ( tInner ~ ExceptT (MergeFail a) IO
-               , Ord a)
-            => CmpT a tInner b
+chaosCompare = forever $ do
+    CC act <- liftIO $ generate arbitrary
+    singleton act
+
+pureCompare :: (Ord a) => MrgT a IO b
 pureCompare = forever ((singleton GetNextStep) >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))
@@ -52,14 +55,17 @@ runSort fn xs = do
     runReaderT (sortFunc xs) mvar
 
 finishSort fn xs = do
-    res <- runSort fn xs
-    case res of
-        Left (Unsorted xs') -> finishSort fn xs'
-        Right xs' -> pure xs'
+    mvar <- newMVar (Just fn)
+    runReaderT (go xs) mvar
+  where
+    go xs = do
+        res <- sortFunc xs
+        case res of
+            Left (Unsorted xs') -> go xs'
+            Right xs' -> pure xs'
 
 prop_sameSize xs = ioProperty $ do
-    (CC fn) <- generate arbitrary
-    result <- finishSort fn ts
+    result <- finishSort chaosCompare ts
     pure (Pre.length xs == Pre.length result)
   where
     ts = map T.pack xs
@@ -68,6 +74,16 @@ prop_sorted xs = ioProperty $ do
     result <- finishSort pureCompare ts
     pure (sort ts == map val result)
   where
+    ts = map T.pack xs
+
+prop_return xs = ioProperty $ do
+    result <- runSort (return ()) ts
+    pure $ collect (length xs) $ go result xs
+  where
+    go result xs
+        | length xs < 2 = result == Right base
+        | otherwise     = result == Left (SortEnded base)
+    base = map (\x -> S x B) ts
     ts = map T.pack xs
 
 -- Just gonna brainstorm some tests here. Maybe start with a list, do one

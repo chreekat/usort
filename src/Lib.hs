@@ -19,7 +19,7 @@ import Debug.Trace
 
 data SortFail a = SortEnded [Sorted a]
                 | Unsorted [a]
-    deriving (Show)
+    deriving (Show, Eq)
 
 usort p xs = do
     mv <- newMVar (Just p)
