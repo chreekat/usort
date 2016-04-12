@@ -20,12 +20,13 @@ merge :: ( Show a
          , MonadIO mOuter)
       => [Sorted a]
       -> [Sorted a]
+      -> [Sorted a]
       -> mOuter (Either (MergeFail a) [Sorted a])
-merge l r = do
+merge l r init = do
     mvar <- ask
     mprog <- liftIO (takeMVar mvar)
     case mprog of
-        Just prog -> liftIO (go prog mvar l r [])
+        Just prog -> liftIO (go prog mvar l r init)
         Nothing -> do
             liftIO (putMVar mvar Nothing)
             pure (Left (MergeEnded (l ++ r)))

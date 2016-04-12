@@ -10,11 +10,12 @@ import Data.Text
 import Data.Text.IO
 
 main :: IO ()
-main = do
-    as <- getArgs
-    items <- lines <$> case as of
-        [] -> hGetContents =<< hDuplicate stdin
-        xs -> concat <$> traverse readFile xs
-    hSetBuffering stdout NoBuffering
-    hSetBuffering stdin NoBuffering
-    (putStrLn . unlines) =<< uSort items
+main = undefined
+-- main = do
+--     as <- getArgs
+--     items <- lines <$> case as of
+--         [] -> hGetContents =<< hDuplicate stdin
+--         xs -> concat <$> traverse readFile xs
+--     hSetBuffering stdout NoBuffering
+--     hSetBuffering stdin NoBuffering
+--     (putStrLn . unlines) =<< uSort items

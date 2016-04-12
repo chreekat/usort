@@ -79,7 +79,7 @@ prop_sorted xs = ioProperty $ do
 
 prop_return xs = ioProperty $ do
     result <- runSort (return ()) xs
-    pure $ collect (length xs) $ go result xs
+    pure (go result xs)
   where
     go result xs
         | length xs < 2 = result == Right base
