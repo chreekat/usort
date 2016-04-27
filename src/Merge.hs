@@ -59,9 +59,9 @@ go p mvar left right result = {-traceShow (left,right,result) $-} case (left, ri
             pure (Left (MergeEnded (result ++ (l:ls) ++ (r:rs))))
         GetNextStep :>>= k ->
             go (k (66, 88, val l, val r)) mvar (l : ls) (r : rs) result
-        Rewrite1 newLeft :>>= k ->
+        Rewrite LT newLeft :>>= k ->
             go (k ()) mvar ((newLeft <$ l) : ls) (r : rs) result
-        Rewrite2 newRiht :>>= k ->
+        Rewrite _  newRiht :>>= k ->
             go (k ()) mvar (l : ls) ((newRiht <$ r) : rs) result
         Compare o :>>= k -> case o of
             LT -> go (k ()) mvar ls (r : rs) (result ++ [fromLeft l])
@@ -82,8 +82,7 @@ type MrgT v m a = ProgramT (MrgI v) m a
 data MrgI v a where
     GetNextStep :: MrgI v (Int, Int, v, v)
     Compare     :: Ordering -> MrgI v ()
-    Rewrite1    :: v -> MrgI v ()
-    Rewrite2    :: v -> MrgI v ()
+    Rewrite     :: Ordering -> v -> MrgI v ()
     Undo        :: MrgI v ()
 
 data MergeFail a = MergeEnded [Sorted a]

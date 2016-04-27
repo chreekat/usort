@@ -26,7 +26,7 @@ userCompare = forever (singleton GetNextStep >>= doSomething)
         case c of
             '1' -> singleton (Compare LT)
             '2' -> singleton (Compare GT)
-            'e' -> singleton . either Rewrite1 Rewrite2 =<< liftIO (editItem x y)
+            'e' -> singleton . either (Rewrite LT) (Rewrite GT) =<< liftIO (editItem x y)
             'u' -> singleton Undo
             _   -> unknownCommand (doSomething v)
 

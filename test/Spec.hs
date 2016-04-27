@@ -40,8 +40,8 @@ instance Arbitrary ChaosCompare where
         [(3, pure (Compare LT))
         ,(3, pure (Compare GT))
         ,(1, pure Undo)
-        ,(1, (Rewrite1 . T.pack) <$> arbitrary)
-        ,(1, (Rewrite2 . T.pack) <$> arbitrary)
+        ,(1, (Rewrite LT . T.pack) <$> arbitrary)
+        ,(1, (Rewrite GT . T.pack) <$> arbitrary)
         ]
 
 instance Show ChaosCompare where
@@ -49,8 +49,20 @@ instance Show ChaosCompare where
         Compare LT -> "LT"
         Compare GT -> "GT"
         Undo -> "Undo"
-        Rewrite1 t -> "Rewrite1 " ++ show t
-        Rewrite2 t -> "Rewrite2 " ++ show t
+        Rewrite LT t -> "RewriteL " ++ show t
+        Rewrite _  t -> "RewriteR " ++ show t
+
+newtype NoRewriteCompare = NR { nrInstr :: MrgI Text () }
+
+instance Arbitrary NoRewriteCompare where
+    arbitrary = NR <$> frequency
+        [(3, pure (Compare LT))
+        ,(3, pure (Compare GT))
+        ,(1, pure Undo)
+        ]
+
+instance Show NoRewriteCompare where
+    show (NR x) = show (CC x)
 
 chaosCompare :: MrgT Text IO b
 chaosCompare = forever $ do
@@ -87,9 +99,19 @@ prop_chaosSameSize xs = ioProperty $ do
 
 prop_sorted xs = ioProperty $ do
     Right result <- retrySort pureCompare xs
-    pure (sort xs == map val result)
+    pure (sort xs == result)
   where
     types = xs :: [Text]
+
+prop_rewrite xs ord' instrs nytt =
+    length xs > 2 ==>
+    ioProperty $ do
+        result <- retrySort prg xs
+        pure $ porpleskeen result
+  where
+    prg = mapM singleton (Rewrite ord' nytt : map nrInstr instrs)
+    porpleskeen (Left xs) = label "aborted sort" $ nytt `elem` xs
+    porpleskeen (Right xs) = label "finished sort" $ nytt `elem` xs
 
 prop_return xs = ioProperty $ do
     result <- runSort (return ()) xs
