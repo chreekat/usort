@@ -33,7 +33,7 @@ import Merge
 instance Arbitrary Text where
     arbitrary = T.pack <$> listOf (elements ['a'..'z'])
 
-newtype ChaosCompare = CC (MrgI Text ())
+newtype ChaosCompare = CC { ccInstr :: MrgI Text () }
 
 instance Arbitrary ChaosCompare where
     arbitrary = CC <$> frequency
@@ -44,6 +44,15 @@ instance Arbitrary ChaosCompare where
         ,(1, (Rewrite2 . T.pack) <$> arbitrary)
         ]
 
+instance Show ChaosCompare where
+    show (CC x) = case x of
+        Compare LT -> "LT"
+        Compare GT -> "GT"
+        Undo -> "Undo"
+        Rewrite1 t -> "Rewrite1 " ++ show t
+        Rewrite2 t -> "Rewrite2 " ++ show t
+
+chaosCompare :: MrgT Text IO b
 chaosCompare = forever $ do
     CC act <- liftIO $ generate arbitrary
     singleton act
@@ -53,26 +62,40 @@ pureCompare = forever ((singleton GetNextStep) >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))
 
-runSort fn xs = do
-    mvar <- newMVar (Just fn)
-    runReaderT (sortFunc xs) mvar
+runSort' instrs = runSort (sequence . map singleton $ instrs)
 
-finishSort fn xs = do
-    mvar <- newMVar (Just fn)
-    runReaderT (go xs) mvar
+runSort fn xs = runReaderT (sortFunc xs) =<< newMVar (Just fn)
+
+retrySort fn xs = runReaderT (go xs) =<< newMVar (Just fn)
   where
     go xs = do
         res <- sortFunc xs
         case res of
             Left (Unsorted xs') -> go xs'
-            Right xs' -> pure xs'
+            Left (SortEnded xs') -> pure (Left xs')
+            Right xs' -> pure (Right xs')
 
-prop_sameSize xs = ioProperty $ do
-    result <- finishSort chaosCompare xs
-    pure (Pre.length xs == Pre.length result)
+-- | Whether or not the sort ends, input length is equal to output length
+prop_sameSize xs instrs = ioProperty $ do
+    result <- retrySort (sequence . map singleton . map ccInstr $ instrs) xs
+    pure $ ppxx result xs
+
+ppxx result xs =
+    label' result $
+        (Pre.length xs == Pre.length (unwrap result))
+  where
+    types = xs :: [Text]
+    label' (Left _) = label "aborted sort"
+    label' (Right _) = label "finished sort"
+    unwrap (Left xs) = xs
+    unwrap (Right xs) = xs
+
+prop_chaosSameSize xs = ioProperty $ do
+    result <- retrySort chaosCompare xs
+    pure $ ppxx result xs
 
 prop_sorted xs = ioProperty $ do
-    result <- finishSort pureCompare xs
+    Right result <- retrySort pureCompare xs
     pure (sort xs == map val result)
   where
     types = xs :: [Text]

@@ -41,7 +41,7 @@ go :: ( Show a )
    -> [Sorted a]
    -> [Sorted a]
    -> IO (Either (MergeFail a) [Sorted a])
-go p mvar left right result = case (left, right) of
+go p mvar left right result = {-traceShow (left,right,result) $-} case (left, right) of
     ([],[]) -> do
         putProg p
         pure (Right result)
@@ -70,7 +70,7 @@ go p mvar left right result = case (left, right) of
             (S x (L p)) : ress ->
                 go (k ()) mvar (S x p : l : ls) (r : rs) ress
             (S x (R p)) : ress ->
-                go (k ()) mvar (r : rs) (S x p : r : rs) ress
+                go (k ()) mvar (l : ls) (S x p : r : rs) ress
             _ -> do
                 putProg (k ())
                 pure (Left (Unmerged (l : ls) (r : rs)))

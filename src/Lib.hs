@@ -50,7 +50,7 @@ redoLeft
 redoLeft l rs = do
     el' <- resort l
     case el' of
-        Left (SortEnded ls') -> traceShow ls' $ error "l resort SortEnded"
+        Left (SortEnded ls') -> pure (Left (SortEnded (ls' ++ map base rs)))
         Left (Unsorted ls') -> pure (Left (Unsorted (ls' ++ rs)))
         Right l' -> goRight l' rs
 
@@ -72,7 +72,7 @@ redoRight
 redoRight l' r' = do
     er' <- resort r'
     case er' of
-        Left (SortEnded rs') -> error "r' resort SortEnded"
+        Left (SortEnded rs') -> pure (Left (SortEnded (l' ++ rs')))
         Left (Unsorted rs') -> redoLeft l' rs'
         Right r'' -> goMerge l' r'' []
 
@@ -82,16 +82,14 @@ resort
      [Sorted a] -> f (Either (SortFail a) [Sorted a])
 resort = go [] []
   where
-    go (l:ls) (r:rs) = goMerge (l:ls) (r:rs)
-    go left right = \case
-        [] -> pure (Right [])
-        [x] -> pure (Right [x])
-        (x:xs) ->
-            let (xs', [S last p]) = splitAt (length xs) (x:xs)
-            in case p of
-                L p' -> go ((S last p') : left) right xs'
-                R p' -> go left ((S last p') : right) xs'
-                B -> error "wat"
+    go (l:ls) (r:rs) xs     = goMerge (l:ls) (r:rs) xs
+    go left   right  []     = goMerge left right []
+    go left   right  (x:xs) =
+        let (xs', [S last p]) = splitAt (length xs) (x:xs)
+        in case p of
+            L p' -> go (S last p' : left) right xs'
+            R p' -> go left (S last p' : right) xs'
+            B -> pure (Left (Unsorted (map val (left ++ right ++ (x:xs)))))
 
 goMerge
   :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,

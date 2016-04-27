@@ -22,3 +22,5 @@ instance Show a => Show (Sorted a) where
     show (S a p) = show a ++ ":" ++ show p
 
 val (S a _) = a
+
+base x = S x B
