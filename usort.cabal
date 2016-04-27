@@ -18,6 +18,7 @@ library
   exposed-modules:     Lib
                        Sorted
                        Merge
+                       Program
   build-depends:       base >= 4.7 && < 5
                        , text >= 1.2.2.0
                        , errors >= 2.1.2

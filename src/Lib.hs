@@ -102,3 +102,11 @@ goMerge l r init = do
         Left (Unmerged l' r') -> redoRight l' r'
         Right sorted -> pure (Right sorted)
 
+retrySort fn xs = runReaderT (go xs) =<< newMVar (Just fn)
+  where
+    go xs = do
+        res <- sortFunc xs
+        case res of
+            Left (Unsorted xs') -> go xs'
+            Left (SortEnded xs') -> pure (Left (map val xs'))
+            Right xs' -> pure (Right (map val xs'))

@@ -66,15 +66,6 @@ runSort' instrs = runSort (mapM singleton instrs)
 
 runSort fn xs = runReaderT (sortFunc xs) =<< newMVar (Just fn)
 
-retrySort fn xs = runReaderT (go xs) =<< newMVar (Just fn)
-  where
-    go xs = do
-        res <- sortFunc xs
-        case res of
-            Left (Unsorted xs') -> go xs'
-            Left (SortEnded xs') -> pure (Left xs')
-            Right xs' -> pure (Right xs')
-
 -- | Whether or not the sort ends, input length is equal to output length
 prop_sameSize xs instrs = ioProperty $ do
     result <- retrySort (mapM singleton . map ccInstr $ instrs) xs
