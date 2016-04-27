@@ -58,11 +58,11 @@ chaosCompare = forever $ do
     singleton act
 
 pureCompare :: (Ord a) => MrgT a IO b
-pureCompare = forever ((singleton GetNextStep) >>= obvious)
+pureCompare = forever (singleton GetNextStep >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))
 
-runSort' instrs = runSort (sequence . map singleton $ instrs)
+runSort' instrs = runSort (mapM singleton instrs)
 
 runSort fn xs = runReaderT (sortFunc xs) =<< newMVar (Just fn)
 
@@ -77,11 +77,11 @@ retrySort fn xs = runReaderT (go xs) =<< newMVar (Just fn)
 
 -- | Whether or not the sort ends, input length is equal to output length
 prop_sameSize xs instrs = ioProperty $ do
-    result <- retrySort (sequence . map singleton . map ccInstr $ instrs) xs
+    result <- retrySort (mapM singleton . map ccInstr $ instrs) xs
     pure $ ppxx result xs
 
 ppxx result xs =
-    label' result $
+    label' result
         (Pre.length xs == Pre.length (unwrap result))
   where
     types = xs :: [Text]
@@ -107,7 +107,7 @@ prop_return xs = ioProperty $ do
     go result xs
         | length xs < 2 = result == Right base
         | otherwise     = result == Left (SortEnded base)
-    base = map (\x -> S x B) xs
+    base = map (`S` B) xs
     types = xs :: [Text]
 
 -- Just gonna brainstorm some tests here. Maybe start with a list, do one

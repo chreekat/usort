@@ -41,7 +41,7 @@ sortFunc xs = do
   where
     (h1, h2) = splitAt half xs
     half = length xs `div` 2
-    bases = map (\x -> S x B)
+    bases = map (`S` B)
 
 redoLeft
   :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,

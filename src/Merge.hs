@@ -50,7 +50,7 @@ go p mvar left right result = {-traceShow (left,right,result) $-} case (left, ri
         pure (Right (result ++ map fromLeft ls))
     ([],rs) -> do
         putProg p
-        pure (Right ((result ++ map fromRiht rs)))
+        pure (Right (result ++ map fromRiht rs))
     (l:ls,r:rs) -> eval (l :| ls) (r :| rs) =<< viewT p
   where
     eval (l :| ls) (r :| rs) = \case
@@ -67,9 +67,9 @@ go p mvar left right result = {-traceShow (left,right,result) $-} case (left, ri
             LT -> go (k ()) mvar ls (r : rs) (result ++ [fromLeft l])
             _  -> go (k ()) mvar (l : ls) rs (result ++ [fromRiht r])
         Undo :>>= k -> case result of
-            (S x (L p)) : ress ->
+            S x (L p) : ress ->
                 go (k ()) mvar (S x p : l : ls) (r : rs) ress
-            (S x (R p)) : ress ->
+            S x (R p) : ress ->
                 go (k ()) mvar (l : ls) (S x p : r : rs) ress
             _ -> do
                 putProg (k ())
