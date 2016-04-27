@@ -17,6 +17,7 @@ import Merge
 
 -- Here's a "program".
 -- userCompare :: MonadIO m => User m TextSort
+userCompare :: MrgT Text IO b
 userCompare = forever (singleton GetNextStep >>= doSomething)
   where
     doSomething :: (Int, Int, Text, Text) -> MrgT Text IO ()
@@ -30,8 +31,10 @@ userCompare = forever (singleton GetNextStep >>= doSomething)
             'u' -> singleton Undo
             _   -> unknownCommand (doSomething v)
 
+getResponse :: IO Char
 getResponse = getChar <* putStrLn ""
 
+unknownCommand :: MonadIO m => m b -> m b
 unknownCommand cont = do
     liftIO $ putStrLn "Unknown command. Let's try again."
     cont
@@ -45,11 +48,12 @@ editItem x y = do
         '2' -> Pre.Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
+replaceText :: MonadException m => Text -> m Text
 replaceText t = do
-    replacement <-
+    replaced <-
         runInputT defaultSettings
                   (getInputLineWithInitial "What instead? > " ("", T.unpack t))
-    return (maybe t T.pack replacement)
+    return (maybe t T.pack replaced)
 
 printPrompt :: (Int, Int, Text, Text) -> IO ()
 printPrompt (remaining, estimate, x, y) = do

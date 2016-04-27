@@ -1,17 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-module Merge (merge, MergeFail(..), MrgT(..), MrgI(..)) where
+module Merge (merge, MergeFail(..), MrgT, MrgI(..)) where
 
-import Control.Error
 import Control.Monad.Operational
 import Control.Monad.Reader
-import Control.Monad.IO.Class
 import Control.Concurrent.MVar
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
-
-import Debug.Trace
 
 import Sorted
 
@@ -22,11 +17,11 @@ merge :: ( Show a
       -> [Sorted a]
       -> [Sorted a]
       -> mOuter (Either (MergeFail a) [Sorted a])
-merge l r init = do
+merge l r initial = do
     mvar <- ask
     mprog <- liftIO (takeMVar mvar)
     case mprog of
-        Just prog -> liftIO (go prog mvar l r init)
+        Just prog -> liftIO (go prog mvar l r initial)
         Nothing -> do
             liftIO (putMVar mvar Nothing)
             pure (Left (MergeEnded (l ++ r)))
@@ -41,17 +36,17 @@ go :: ( Show a )
    -> [Sorted a]
    -> [Sorted a]
    -> IO (Either (MergeFail a) [Sorted a])
-go p mvar left right result = {-traceShow (left,right,result) $-} case (left, right) of
+go prog mvar left right result = {-traceShow (left,right,result) $-} case (left, right) of
     ([],[]) -> do
-        putProg p
+        putProg prog
         pure (Right result)
     (ls,[]) -> do
-        putProg p
+        putProg prog
         pure (Right (result ++ map fromLeft ls))
     ([],rs) -> do
-        putProg p
+        putProg prog
         pure (Right (result ++ map fromRiht rs))
-    (l:ls,r:rs) -> eval (l :| ls) (r :| rs) =<< viewT p
+    (l:ls,r:rs) -> eval (l :| ls) (r :| rs) =<< viewT prog
   where
     eval (l :| ls) (r :| rs) = \case
         Return _ -> do

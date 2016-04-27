@@ -4,18 +4,11 @@
 {-# LANGUAGE GADTs #-}
 module Lib where
 
-import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
-import Data.List
-import Data.Foldable
-import Control.Monad.State
-import Control.Error
 
 import Sorted
 import Merge
-
-import Debug.Trace
 
 data SortFail a = SortEnded [Sorted a]
                 | Unsorted [a]
@@ -85,24 +78,25 @@ resort = go [] []
     go (l:ls) (r:rs) xs     = goMerge (l:ls) (r:rs) xs
     go left   right  []     = goMerge left right []
     go left   right  (x:xs) =
-        let (xs', [S last p]) = splitAt (length xs) (x:xs)
+        let (xs', [S final p]) = splitAt (length xs) (x:xs)
         in case p of
-            L p' -> go (S last p' : left) right xs'
-            R p' -> go left (S last p' : right) xs'
+            L p' -> go (S final p' : left) right xs'
+            R p' -> go left (S final p' : right) xs'
             B -> pure (Left (Unsorted (map val (left ++ right ++ (x:xs)))))
 
 goMerge
   :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
       MonadIO f) =>
      [Sorted a] -> [Sorted a] -> [Sorted a] -> f (Either (SortFail a) [Sorted a])
-goMerge l r init = do
-    em <- merge l r init
+goMerge l r initial = do
+    em <- merge l r initial
     case em of
         Left (MergeEnded xs) -> pure (Left (SortEnded xs))
         Left (Unmerged l' r') -> redoRight l' r'
         Right sorted -> pure (Right sorted)
 
-retrySort fn xs = runReaderT (go xs) =<< newMVar (Just fn)
+retrySort :: Show v => MrgT v IO a -> [v] -> IO (Either [v] [v])
+retrySort fn input = runReaderT (go input) =<< newMVar (Just fn)
   where
     go xs = do
         res <- sortFunc xs

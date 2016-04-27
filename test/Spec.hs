@@ -5,7 +5,6 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures -fno-warn-orphans #-}
 import Prelude as Pre
 
-import Control.Error
 import Control.Concurrent
 import Control.Monad.State
 import Control.Monad.Reader
@@ -47,7 +46,7 @@ instance Arbitrary ChaosCompare where
 instance Show ChaosCompare where
     show (CC x) = case x of
         Compare LT -> "LT"
-        Compare GT -> "GT"
+        Compare _  -> "GT"
         Undo -> "Undo"
         Rewrite LT t -> "RewriteL " ++ show t
         Rewrite _  t -> "RewriteR " ++ show t
@@ -74,7 +73,7 @@ pureCompare = forever (singleton GetNextStep >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))
 
-runSort' instrs = runSort (mapM singleton instrs)
+-- runSort' instrs = runSort (mapM singleton instrs)
 
 runSort fn xs = runReaderT (sortFunc xs) =<< newMVar (Just fn)
 
@@ -87,11 +86,11 @@ ppxx result xs =
     label' result
         (Pre.length xs == Pre.length (unwrap result))
   where
-    types = xs :: [Text]
+    _types = xs :: [Text]
     label' (Left _) = label "aborted sort"
     label' (Right _) = label "finished sort"
-    unwrap (Left xs) = xs
-    unwrap (Right xs) = xs
+    unwrap (Left x) = x
+    unwrap (Right x) = x
 
 prop_chaosSameSize xs = ioProperty $ do
     result <- retrySort chaosCompare xs
@@ -101,7 +100,7 @@ prop_sorted xs = ioProperty $ do
     Right result <- retrySort pureCompare xs
     pure (sort xs == result)
   where
-    types = xs :: [Text]
+    _types = xs :: [Text]
 
 prop_rewrite xs ord' instrs nytt =
     length xs > 2 ==>
@@ -110,18 +109,18 @@ prop_rewrite xs ord' instrs nytt =
         pure $ porpleskeen result
   where
     prg = mapM singleton (Rewrite ord' nytt : map nrInstr instrs)
-    porpleskeen (Left xs) = label "aborted sort" $ nytt `elem` xs
-    porpleskeen (Right xs) = label "finished sort" $ nytt `elem` xs
+    porpleskeen (Left x) = label "aborted sort" $ nytt `elem` x
+    porpleskeen (Right x) = label "finished sort" $ nytt `elem` x
 
-prop_return xs = ioProperty $ do
-    result <- runSort (return ()) xs
-    pure (go result xs)
+prop_return ts = ioProperty $ do
+    result <- runSort (return ()) ts
+    pure (go result ts)
   where
     go result xs
-        | length xs < 2 = result == Right base
-        | otherwise     = result == Left (SortEnded base)
-    base = map (`S` B) xs
-    types = xs :: [Text]
+        | length xs < 2 = result == Right bases
+        | otherwise     = result == Left (SortEnded bases)
+    bases = map base ts
+    _types = ts :: [Text]
 
 -- Just gonna brainstorm some tests here. Maybe start with a list, do one
 -- compare that swaps two elements (I forget if it's GT or LT that would do
