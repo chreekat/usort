@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GADTs #-}
-module Lib where
+module Sort where
 
 import Control.Monad.Reader
 import Control.Monad.State

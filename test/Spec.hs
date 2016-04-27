@@ -16,7 +16,7 @@ import Data.Text (Text)
 
 import qualified Data.Text as T
 
-import Lib
+import Sort
 import Sorted
 import Merge
 

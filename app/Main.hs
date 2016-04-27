@@ -11,7 +11,7 @@ import System.Environment
 import Data.Text hiding (map)
 import Data.Text.IO
 
-import Lib
+import Sort
 import Program
 
 main :: IO ()
