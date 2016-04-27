@@ -27,6 +27,7 @@ userCompare = forever (singleton GetNextStep >>= doSomething)
         case c of
             '1' -> singleton (Compare LT)
             '2' -> singleton (Compare GT)
+            'd' -> singleton . Delete =<< liftIO delItem
             'e' -> singleton . either (Rewrite LT) (Rewrite GT) =<< liftIO (editItem x y)
             'u' -> singleton Undo
             _   -> unknownCommand (doSomething v)
@@ -38,6 +39,15 @@ unknownCommand :: MonadIO m => m b -> m b
 unknownCommand cont = do
     liftIO $ putStrLn "Unknown command. Let's try again."
     cont
+
+delItem :: IO Ordering
+delItem = do
+    putStr "Which item? > "
+    c <- getResponse
+    case c of
+        '1' -> pure LT
+        '2' -> pure GT
+        _   -> unknownCommand delItem
 
 editItem :: Text -> Text -> IO (Pre.Either Text Text)
 editItem x y = do
@@ -62,6 +72,7 @@ printPrompt (remaining, estimate, x, y) = do
     T.putStrLn ("-- (2) " <> y)
     T.putStrLn "-- Or [e]dit an entry"
     T.putStrLn "-- Or [u]ndo last comparison"
+    T.putStrLn "-- Or [d]elete an entry"
     T.putStr "-> "
   where
     hdrFmt = "(~" % int % "/" % int % ") Which is more important?"

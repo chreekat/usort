@@ -50,6 +50,8 @@ instance Show ChaosCompare where
         Undo -> "Undo"
         Rewrite LT t -> "RewriteL " ++ show t
         Rewrite _  t -> "RewriteR " ++ show t
+        Delete LT -> "DeleteL"
+        Delete _  -> "DeleteR"
 
 newtype NoRewriteCompare = NR { nrInstr :: MrgI Text () }
 
@@ -111,6 +113,23 @@ prop_rewrite xs ord' instrs nytt =
     prg = mapM singleton (Rewrite ord' nytt : map nrInstr instrs)
     porpleskeen (Left x) = label "aborted sort" $ nytt `elem` x
     porpleskeen (Right x) = label "finished sort" $ nytt `elem` x
+
+-- This test kinda sucks, since the delete should really go somewhere in
+-- the middle. Or I need to figure out a way to write a chaosCompare that
+-- confirms the number of deletes.
+prop_delete xs ord' instrs =
+    length xs > 2 ==>
+    ioProperty $ do
+        result <- retrySort prg xs
+        pure $ porpleskeen result
+  where
+    prg = mapM singleton (Delete ord' : map nrInstr instrs)
+    porpleskeen (Left x) =
+        label "aborted sort" $
+        (Pre.length xs == 1 + Pre.length x)
+    porpleskeen (Right x) =
+        label "finished sort" $
+        (Pre.length xs == 1 + Pre.length x)
 
 prop_return ts = ioProperty $ do
     result <- runSort (return ()) ts

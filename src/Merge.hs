@@ -8,7 +8,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Concurrent.MVar
 import Data.List.NonEmpty (NonEmpty(..))
-import Lens.Family
 import Lens.Family.State
 import Lens.Family.Stock
 
@@ -70,7 +69,7 @@ go prog mvar left right result = {-traceShow (left,right,result) $-} case (left,
         Compare o :>>= k -> _2 %= pred >> case o of
             LT -> go (k ()) mvar ls (r : rs) (result ++ [fromLeft l])
             _  -> go (k ()) mvar (l : ls) rs (result ++ [fromRiht r])
-        Undo :>>= k -> _2 %= succ >> case result of
+        Undo :>>= k -> _2 %= succ' >> case result of
             S x (L p) : ress ->
                 go (k ()) mvar (S x p : l : ls) (r : rs) ress
             S x (R p) : ress ->
@@ -78,6 +77,10 @@ go prog mvar left right result = {-traceShow (left,right,result) $-} case (left,
             _ -> do
                 putProg (k ())
                 pure (Left (Unmerged (l : ls) (r : rs)))
+        Delete LT :>>= k ->
+            go (k ()) mvar ls (r : rs) result
+        Delete _  :>>= k ->
+            go (k ()) mvar (l : ls) rs result
     putProg p = liftIO $ putMVar mvar (Just p)
     putNoProg = liftIO $ putMVar mvar Nothing
     succ' n | n > 0 = succ n
@@ -90,6 +93,7 @@ data MrgI v a where
     Compare     :: Ordering -> MrgI v ()
     Rewrite     :: Ordering -> v -> MrgI v ()
     Undo        :: MrgI v ()
+    Delete      :: Ordering -> MrgI v ()
 
 data MergeFail a = MergeEnded [Sorted a]
                  | Unmerged [Sorted a] [Sorted a]
