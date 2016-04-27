@@ -4,7 +4,7 @@ module Program where
 import Prelude as Pre
 
 import Control.Monad
-import Control.Monad.IO.Class
+import Control.Monad.State
 import Control.Monad.Operational
 import Data.Monoid ((<>))
 import Data.Text (Text)
@@ -17,10 +17,10 @@ import Merge
 
 -- Here's a "program".
 -- userCompare :: MonadIO m => User m TextSort
-userCompare :: MrgT Text IO b
+userCompare :: MrgT Text (StateT (Int, Int) IO) b
 userCompare = forever (singleton GetNextStep >>= doSomething)
   where
-    doSomething :: (Int, Int, Text, Text) -> MrgT Text IO ()
+    doSomething :: (Int, Int, Text, Text) -> MrgT Text (StateT (Int,Int) IO) ()
     doSomething v@(remain, est, x, y) = do
         liftIO (printPrompt (remain, est, x, y))
         c <- liftIO getResponse

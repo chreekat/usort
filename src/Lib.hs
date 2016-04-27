@@ -5,6 +5,7 @@
 module Lib where
 
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Concurrent
 
 import Sorted
@@ -14,15 +15,12 @@ data SortFail a = SortEnded [Sorted a]
                 | Unsorted [a]
     deriving (Show, Eq)
 
--- sortFunc :: ( Show a
---          , MonadReader (MVar (Maybe (MrgT a IO b))) mOuter
---          , MonadIO mOuter)
---       => [a]
---       -> mOuter (Either (SortFail a) [Sorted a])
 sortFunc
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
-     [a] -> f (Either (SortFail a) [Sorted a])
+  :: ( Show a
+     , MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f
+     , MonadState (Int, Int) f, MonadIO f)
+  => [a]
+  -> f (Either (SortFail a) [Sorted a])
 sortFunc [] = pure (Right [])
 sortFunc [x] = pure (Right [S x B])
 sortFunc xs = do
@@ -37,8 +35,8 @@ sortFunc xs = do
     bases = map (`S` B)
 
 redoLeft
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
+  :: (Show a, MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f,
+      MonadState (Int, Int) f, MonadIO f) =>
      [Sorted a] -> [a] -> f (Either (SortFail a) [Sorted a])
 redoLeft l rs = do
     el' <- resort l
@@ -48,8 +46,8 @@ redoLeft l rs = do
         Right l' -> goRight l' rs
 
 goRight
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
+  :: (Show a, MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f,
+      MonadState (Int, Int) f, MonadIO f) =>
      [Sorted a] -> [a] -> f (Either (SortFail a) [Sorted a])
 goRight l h2 = do
     er <- sortFunc h2
@@ -59,8 +57,8 @@ goRight l h2 = do
         Right r -> goMerge l r []
 
 redoRight
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
+  :: (Show a, MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f,
+      MonadState (Int, Int) f, MonadIO f) =>
      [Sorted a] -> [Sorted a] -> f (Either (SortFail a) [Sorted a])
 redoRight l' r' = do
     er' <- resort r'
@@ -70,8 +68,8 @@ redoRight l' r' = do
         Right r'' -> goMerge l' r'' []
 
 resort
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
+  :: (Show a, MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f,
+      MonadState (Int, Int) f, MonadIO f) =>
      [Sorted a] -> f (Either (SortFail a) [Sorted a])
 resort = go [] []
   where
@@ -85,8 +83,8 @@ resort = go [] []
             B -> pure (Left (Unsorted (map val (left ++ right ++ (x:xs)))))
 
 goMerge
-  :: (Show a, MonadReader (MVar (Maybe (MrgT a IO b))) f,
-      MonadIO f) =>
+  :: (Show a, MonadReader (MVar (Maybe (MrgT a (StateT (Int,Int) IO) b))) f,
+      MonadState (Int, Int) f, MonadIO f) =>
      [Sorted a] -> [Sorted a] -> [Sorted a] -> f (Either (SortFail a) [Sorted a])
 goMerge l r initial = do
     em <- merge l r initial
@@ -95,8 +93,8 @@ goMerge l r initial = do
         Left (Unmerged l' r') -> redoRight l' r'
         Right sorted -> pure (Right sorted)
 
-retrySort :: Show v => MrgT v IO a -> [v] -> IO (Either [v] [v])
-retrySort fn input = runReaderT (go input) =<< newMVar (Just fn)
+retrySort :: Show v => MrgT v (StateT (Int, Int) IO) a -> [v] -> IO (Either [v] [v])
+retrySort fn input = runReaderT (flip evalStateT (n', n') (go input)) =<< newMVar (Just fn)
   where
     go xs = do
         res <- sortFunc xs
@@ -104,3 +102,8 @@ retrySort fn input = runReaderT (go input) =<< newMVar (Just fn)
             Left (Unsorted xs') -> go xs'
             Left (SortEnded xs') -> pure (Left (map val xs'))
             Right xs' -> pure (Right (map val xs'))
+    n' = nlogn (length input)
+
+nlogn :: Int -> Int
+nlogn n = let g = fromRational . fromIntegral $ n
+          in floor (g * log g :: Double)

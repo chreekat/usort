@@ -63,19 +63,19 @@ instance Arbitrary NoRewriteCompare where
 instance Show NoRewriteCompare where
     show (NR x) = show (CC x)
 
-chaosCompare :: MrgT Text IO b
+chaosCompare :: MrgT Text (StateT (Int,Int) IO) b
 chaosCompare = forever $ do
     CC act <- liftIO $ generate arbitrary
     singleton act
 
-pureCompare :: (Ord a) => MrgT a IO b
+pureCompare :: (Ord a) => MrgT a (StateT (Int,Int) IO) b
 pureCompare = forever (singleton GetNextStep >>= obvious)
   where
     obvious (_, _, l, r) = singleton (Compare (compare l r))
 
 -- runSort' instrs = runSort (mapM singleton instrs)
 
-runSort fn xs = runReaderT (sortFunc xs) =<< newMVar (Just fn)
+runSort fn xs = runReaderT (flip evalStateT (0,0) (sortFunc xs)) =<< newMVar (Just fn)
 
 -- | Whether or not the sort ends, input length is equal to output length
 prop_sameSize xs instrs = ioProperty $ do

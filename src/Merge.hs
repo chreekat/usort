@@ -5,13 +5,18 @@ module Merge (merge, MergeFail(..), MrgT, MrgI(..)) where
 
 import Control.Monad.Operational
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Concurrent.MVar
 import Data.List.NonEmpty (NonEmpty(..))
+import Lens.Family
+import Lens.Family.State
+import Lens.Family.Stock
 
 import Sorted
 
 merge :: ( Show a
-         , MonadReader (MVar (Maybe (MrgT a IO b))) mOuter
+         , MonadReader (MVar (Maybe (MrgT a (StateT (Int, Int) IO) b))) mOuter
+         , MonadState (Int, Int) mOuter
          , MonadIO mOuter)
       => [Sorted a]
       -> [Sorted a]
@@ -19,9 +24,13 @@ merge :: ( Show a
       -> mOuter (Either (MergeFail a) [Sorted a])
 merge l r initial = do
     mvar <- ask
+    ppos <- get
     mprog <- liftIO (takeMVar mvar)
     case mprog of
-        Just prog -> liftIO (go prog mvar l r initial)
+        Just prog -> do
+            (rslt, ploop) <- liftIO (flip runStateT ppos (go prog mvar l r initial))
+            put ploop
+            pure rslt
         Nothing -> do
             liftIO (putMVar mvar Nothing)
             pure (Left (MergeEnded (l ++ r)))
@@ -30,12 +39,12 @@ merge l r initial = do
 -- be in the "left side" (positive? Negative? I forget the term) to avoid a
 -- infinitely-recursing type. Similarly, we must concretely use IO.
 go :: ( Show a )
-   => MrgT a IO b
-   -> MVar (Maybe (MrgT a IO b))
+   => MrgT a (StateT (Int, Int) IO) b
+   -> MVar (Maybe (MrgT a (StateT (Int, Int) IO) b))
    -> [Sorted a]
    -> [Sorted a]
    -> [Sorted a]
-   -> IO (Either (MergeFail a) [Sorted a])
+   -> StateT (Int, Int) IO (Either (MergeFail a) [Sorted a])
 go prog mvar left right result = {-traceShow (left,right,result) $-} case (left, right) of
     ([],[]) -> do
         putProg prog
@@ -52,16 +61,16 @@ go prog mvar left right result = {-traceShow (left,right,result) $-} case (left,
         Return _ -> do
             putNoProg
             pure (Left (MergeEnded (result ++ (l:ls) ++ (r:rs))))
-        GetNextStep :>>= k ->
-            go (k (66, 88, val l, val r)) mvar (l : ls) (r : rs) result
+        GetNextStep :>>= k -> get >>= \(tot, rmn) ->
+            go (k (rmn, tot, val l, val r)) mvar (l : ls) (r : rs) result
         Rewrite LT newLeft :>>= k ->
             go (k ()) mvar ((newLeft <$ l) : ls) (r : rs) result
         Rewrite _  newRiht :>>= k ->
             go (k ()) mvar (l : ls) ((newRiht <$ r) : rs) result
-        Compare o :>>= k -> case o of
+        Compare o :>>= k -> _2 %= pred >> case o of
             LT -> go (k ()) mvar ls (r : rs) (result ++ [fromLeft l])
             _  -> go (k ()) mvar (l : ls) rs (result ++ [fromRiht r])
-        Undo :>>= k -> case result of
+        Undo :>>= k -> _2 %= succ >> case result of
             S x (L p) : ress ->
                 go (k ()) mvar (S x p : l : ls) (r : rs) ress
             S x (R p) : ress ->
@@ -71,6 +80,8 @@ go prog mvar left right result = {-traceShow (left,right,result) $-} case (left,
                 pure (Left (Unmerged (l : ls) (r : rs)))
     putProg p = liftIO $ putMVar mvar (Just p)
     putNoProg = liftIO $ putMVar mvar Nothing
+    succ' n | n > 0 = succ n
+            | otherwise = n
 
 type MrgT v m a = ProgramT (MrgI v) m a
 
