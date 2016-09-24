@@ -15,11 +15,13 @@ import Sort
 import Program
 
 main :: IO ()
--- main = undefined
 main = do
     as <- getArgs
     items <- lines <$> case as of
-        [] -> hGetContents =<< hDuplicate stdin
+        [] -> do
+            dup <- hDuplicate stdin
+            maybe (pure ()) (hSetEncoding dup) =<< hGetEncoding stdin
+            hGetContents dup
         xs -> concat <$> traverse readFile xs
     hSetBuffering stdout NoBuffering
     hSetBuffering stdin NoBuffering
