@@ -7,7 +7,6 @@ import Test.Tasty.HUnit
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
-import Control.Lens hiding (elements, Choice)
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -96,10 +95,10 @@ propUndo h (TwoActions st) = do
 propEditL, propEditR :: [MergeState] -> MergeState -> Text -> Bool
 propEditL h st@(MergeState _ (_:|ys) _ _) x =
     let ActResult (h', Right st') = processAct h st (Edit L x)
-    in h' == (st:h) && (st & stleft .~ (x:|ys)) == st'
+    in h' == (st:h) && st { _stleft = x:|ys } == st'
 propEditR h st@(MergeState _ _ (_:|ys) _) x =
     let ActResult (h', Right st') = processAct h st (Edit R x)
-    in h' == (st:h) && (st & stright .~ (x:|ys)) == st'
+    in h' == (st:h) && st { _stright = x:|ys } == st'
 
 -- Ok i'm tired. Could use more tests of processAct, though.
 

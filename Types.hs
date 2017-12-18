@@ -3,7 +3,6 @@ module Types where
 
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
-import Control.Lens
 
 data MergeState = MergeState
         { _stacc :: [Text]
@@ -16,5 +15,3 @@ data MergeState = MergeState
           -- ^ lists left to process
         }
     deriving (Eq, Show)
-
-makeLenses ''MergeState
