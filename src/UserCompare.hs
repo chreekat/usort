@@ -1,61 +1,54 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Program where
+module UserCompare (userCompare) where
 
-import Prelude as Pre
-
-import Control.Monad
-import Control.Monad.State
-import Control.Monad.Operational
+import USort
 import Data.Monoid ((<>))
 import Data.Text (Text)
+import Data.List.NonEmpty (NonEmpty(..))
 import Formatting
 import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Merge
-
--- Here's a "program".
--- userCompare :: MonadIO m => User m TextSort
-userCompare :: MrgT Text (StateT (Int, Int) IO) b
-userCompare = forever (singleton GetNextStep >>= doSomething)
+userCompare :: MergeState -> IO Action
+userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
+    printPrompt (remain, est, l, r)
+    c <- getResponse
+    case c of
+        '1' -> pure $ Choose L
+        '2' -> pure $ Choose R
+        'd' -> Delete <$> delItem
+        'e' -> either (Edit L) (Edit R) <$> editItem l r
+        'u' -> pure Undo
+        _   -> unknownCommand (userCompare m)
   where
-    doSomething :: (Int, Int, Text, Text) -> MrgT Text (StateT (Int,Int) IO) ()
-    doSomething v@(remain, est, x, y) = do
-        liftIO (printPrompt (remain, est, x, y))
-        c <- liftIO getResponse
-        case c of
-            '1' -> singleton (Compare LT)
-            '2' -> singleton (Compare GT)
-            'd' -> singleton . Delete =<< liftIO delItem
-            'e' -> singleton . either (Rewrite LT) (Rewrite GT) =<< liftIO (editItem x y)
-            'u' -> singleton Undo
-            _   -> unknownCommand (doSomething v)
+    remain = 999
+    est = 333
 
 getResponse :: IO Char
 getResponse = getChar <* putStrLn ""
 
-unknownCommand :: MonadIO m => m b -> m b
+unknownCommand :: IO a -> IO a
 unknownCommand cont = do
-    liftIO $ putStrLn "Unknown command. Let's try again."
+    putStrLn "Unknown command. Let's try again."
     cont
 
-delItem :: IO Ordering
+delItem :: IO Choice
 delItem = do
     putStr "Which item? > "
     c <- getResponse
     case c of
-        '1' -> pure LT
-        '2' -> pure GT
+        '1' -> pure L
+        '2' -> pure R
         _   -> unknownCommand delItem
 
-editItem :: Text -> Text -> IO (Pre.Either Text Text)
+editItem :: Text -> Text -> IO (Either Text Text)
 editItem x y = do
     putStr "Which item? > "
     c <- getResponse
     case c of
-        '1' -> Pre.Left  <$> replaceText x
-        '2' -> Pre.Right <$> replaceText y
+        '1' -> Left  <$> replaceText x
+        '2' -> Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
 replaceText :: MonadException m => Text -> m Text
