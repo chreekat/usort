@@ -5,7 +5,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Control.Lens
 
-data State = State
+data MergeState = MergeState
         { _stacc :: [Text]
           -- ^ accumulator for current merge
         , _stleft :: NonEmpty Text
@@ -17,4 +17,4 @@ data State = State
         }
     deriving (Eq, Show)
 
-makeLenses ''State
+makeLenses ''MergeState

@@ -15,9 +15,9 @@ import qualified Data.Text as T
 import USort
 
 
-instance Arbitrary State where
+instance Arbitrary MergeState where
     arbitrary =
-        State <$> arbitrary
+        MergeState <$> arbitrary
               <*> arbitrary
               <*> arbitrary
               <*> scale (min 20) arbitrary
@@ -40,13 +40,13 @@ main :: IO ()
 main = defaultMain tests
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
-newtype TwoActions = TwoActions State
+newtype TwoActions = TwoActions MergeState
     deriving (Eq, Show)
 
 instance Arbitrary TwoActions where
     arbitrary =
         fmap TwoActions
-            $ State
+            $ MergeState
             <$> arbitrary
             <*> arbitrary
             <*> arbitrary
@@ -63,13 +63,13 @@ tests = testGroup "tests"
         , testCase "lastL"  $ findNextMerge ["x"] ["y"] [] [] @?= Left ["x","y"]
         , testCase "lastR"  $ findNextMerge ["x"] [] ["y"] [] @?= Left ["x","y"]
         , testProperty "ready" $
-            \a r -> findNextMerge a ["x"] ["y"] r == (Right $ State a ("x":|[]) ("y":|[]) r)
+            \a r -> findNextMerge a ["x"] ["y"] r == (Right $ MergeState a ("x":|[]) ("y":|[]) r)
         , testProperty "lastMergeL" $
             \(NonEmpty a) r -> findNextMerge a ["x"] [] [r]
-                == Right (State [] r (NE.reverse ("x":|a)) [])
+                == Right (MergeState [] r (NE.reverse ("x":|a)) [])
         , testProperty "lastMergeR" $
             \(NonEmpty a) r -> findNextMerge a [] ["x"] [r]
-                == Right (State [] r (NE.reverse ("x":|a)) [])
+                == Right (MergeState [] r (NE.reverse ("x":|a)) [])
         ]
     , testGroup "processAct"
         [ testProperty "undo" propUndo
@@ -78,11 +78,11 @@ tests = testGroup "tests"
         ]
     , testGroup "sort"
         [ testProperty "realSort" $
-            \xs -> Identity (sort xs) == usort realSort xs
+            \xs -> Identity (sort xs) == usort realCompare xs
         ]
     ]
 
-propUndo :: [State] -> TwoActions -> Gen Bool
+propUndo :: [MergeState] -> TwoActions -> Gen Bool
 propUndo h (TwoActions st) = do
     act <- oneof
         [ Choose <$> arbitrary
@@ -93,11 +93,11 @@ propUndo h (TwoActions st) = do
         ActResult (h', Right st') = processAct newHist newState Undo
     pure $ h == h' && st == st'
 
-propEditL, propEditR :: [State] -> State -> Text -> Bool
-propEditL h st@(State _ (_:|ys) _ _) x =
+propEditL, propEditR :: [MergeState] -> MergeState -> Text -> Bool
+propEditL h st@(MergeState _ (_:|ys) _ _) x =
     let ActResult (h', Right st') = processAct h st (Edit L x)
     in h' == (st:h) && (st & stleft .~ (x:|ys)) == st'
-propEditR h st@(State _ _ (_:|ys) _) x =
+propEditR h st@(MergeState _ _ (_:|ys) _) x =
     let ActResult (h', Right st') = processAct h st (Edit R x)
     in h' == (st:h) && (st & stright .~ (x:|ys)) == st'
 
