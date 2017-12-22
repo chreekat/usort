@@ -3,6 +3,7 @@
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
+import Test.Tasty.Golden
 
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -10,9 +11,10 @@ import Data.Functor.Identity
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.ByteString as B
 
 import USort
-
+import SplitItems
 
 instance Arbitrary MergeState where
     arbitrary =
@@ -75,9 +77,22 @@ tests = testGroup "tests"
         , testProperty "editL" propEditL
         , testProperty "editR" propEditR
         ]
-    , testGroup "sort"
-        [ testProperty "realSort" $
-            \xs -> Identity (sort xs) == usort realCompare xs
+    , testGroup
+        "sort"
+        [ testProperty "realSort"
+              $ \xs -> Identity (sort xs) == usort realCompare xs
+        ]
+    , testGroup
+        "splitting items"
+        [ goldenVsFile
+              "golden"
+              "test/golden/splitme.golden"
+              "test/golden/splitme.out"
+              ( (writeBinaryFile "test/golden/splitme.out")
+              =<< ( (concatMap (\x -> unlines ["ITEM", x]) . items . lines)
+                  <$> readFile "test/golden/splitme.txt"
+                  )
+              )
         ]
     ]
 

@@ -1,5 +1,5 @@
-{ mkDerivation, base, formatting, haskeline, stdenv, tasty
-, tasty-hunit, tasty-quickcheck, text
+{ mkDerivation, base, bytestring, formatting, haskeline, stdenv
+, tasty, tasty-golden, tasty-hunit, tasty-quickcheck, text
 }:
 mkDerivation {
   pname = "usort";
@@ -10,7 +10,8 @@ mkDerivation {
   libraryHaskellDepends = [ base formatting haskeline text ];
   executableHaskellDepends = [ base text ];
   testHaskellDepends = [
-    base tasty tasty-hunit tasty-quickcheck text
+    base bytestring tasty tasty-golden tasty-hunit tasty-quickcheck
+    text
   ];
   homepage = "http://github.com/chreekat/usort#readme";
   description = "With usort, the sort is you!";
