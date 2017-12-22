@@ -11,6 +11,7 @@ import Data.Functor.Identity
 import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import qualified Data.ByteString as B
 
 import USort
@@ -88,9 +89,9 @@ tests = testGroup "tests"
               "golden"
               "test/golden/splitme.golden"
               "test/golden/splitme.out"
-              ( (writeBinaryFile "test/golden/splitme.out")
-              =<< ( (concatMap (\x -> unlines ["ITEM", x]) . items . lines)
-                  <$> readFile "test/golden/splitme.txt"
+              ( (T.writeFile "test/golden/splitme.out")
+              =<< ( (T.concat . map (\x -> T.unlines ["ITEM", x]) . items . T.lines)
+                  <$> T.readFile "test/golden/splitme.txt"
                   )
               )
         ]

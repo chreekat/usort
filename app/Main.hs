@@ -11,11 +11,12 @@ import Data.Text.IO
 
 import USort
 import UserCompare
+import SplitItems
 
 main :: IO ()
 main = do
     as <- getArgs
-    items <- lines <$> case as of
+    items <- items . lines <$> case as of
         [] -> do
             dup <- hDuplicate stdin
             maybe (pure ()) (hSetEncoding dup) =<< hGetEncoding stdin

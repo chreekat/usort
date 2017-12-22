@@ -1,13 +1,10 @@
 {-# LANGUAGE ViewPatterns #-}
-module SplitItems (items) where
+{-# LANGUAGE OverloadedStrings #-}
 
-import Data.List
-import Data.Char
-import Control.Monad.Fix
-
-{- 
+{- |
 The point herein is to take a heirarchical list, such as
 
+@@
     -  xxxxxxxx xxx xxxxxx xxx xxxx'x xxx xxxx xxxxxx
         -  xxxxx xx xx xxxx xxxx xxxxxx?
     -  Rxxxxxx xx
@@ -32,6 +29,7 @@ The point herein is to take a heirarchical list, such as
     -  Sxxxx xxx AxxxSxxx
     -  Cxxxxx xxxxxxx xxxxxxx (x.x. xxxxxxxxxxx)
     -  xxx xxxxTxxxDxxxxxxx xxx xxx xxxxxxx
+@@
 
 and return a list of top-level items. Whitespace should be removed and re-added
 at the end.
@@ -53,18 +51,30 @@ Oh wait, we already have Data.List.transpose. Heh.
 Then we just need to find the indices that start elements.
 -}
 
-items :: [String] -> [String]
+module SplitItems (items) where
+
+import Data.List
+import Data.Char
+import Data.Text (Text)
+import qualified Data.Text as T
+import Control.Monad.Fix
+
+-- | Break lines into items
+items :: [Text] -> [Text]
 items input =
     let (length -> blank, content) =
-            span (all isSpace) (transpose (makeSquare input))
+            span (T.all isSpace) (T.transpose (makeSquare input))
         indices = case content of
             [] -> []
-            (c:cs) -> findIndices (not . isSpace) c
-        groups = splitItems indices (transpose content)
+            (c:cs) -> findIndices (not . isSpace) (T.unpack c)
+        groups = splitItems indices (T.transpose content)
     in  map
-            (unlines . map ((replicate blank ' ' ++) . dropWhileEnd isSpace))
+            (T.unlines . map ((T.append (T.replicate blank " ")) . T.dropWhileEnd isSpace))
             groups
 
+-- | Sort of like multiple splitAts; each i in 'splitItems is' is the start of a
+-- new segment.
+splitItems :: [Int] -> [a] -> [[a]]
 splitItems is xs = fix f is
   where
     f _ [] = [xs]
@@ -74,9 +84,6 @@ splitItems is xs = fix f is
 slice :: Int -> Int -> [a] -> [a]
 slice begin ct = take ct . drop begin
 
-justifyLeft :: Int -> Char -> String -> String
-justifyLeft x c s | x <= length s = s
-                  | otherwise = s ++ replicate (x - length s) c
-
+makeSquare :: [Text] -> [Text]
 makeSquare [] = []
-makeSquare ls = let x = maximum (map length ls) in map (justifyLeft x ' ') ls
+makeSquare ls = let x = maximum (map T.length ls) in map (T.justifyLeft x ' ') ls
