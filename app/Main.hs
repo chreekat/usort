@@ -16,7 +16,7 @@ import SplitItems
 main :: IO ()
 main = do
     as <- getArgs
-    items <- items . lines <$> case as of
+    is <- items . lines <$> case as of
         [] -> do
             dup <- hDuplicate stdin
             maybe (pure ()) (hSetEncoding dup) =<< hGetEncoding stdin
@@ -24,4 +24,4 @@ main = do
         xs -> concat <$> traverse readFile xs
     hSetBuffering stdout NoBuffering
     hSetBuffering stdin NoBuffering
-    (putStr . unlines) =<< usort userCompare items
+    (putStr . unlines) =<< usort userCompare is

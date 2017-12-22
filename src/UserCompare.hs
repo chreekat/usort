@@ -61,8 +61,8 @@ replaceText t = do
 printPrompt :: (Int, Int, Text, Text) -> IO ()
 printPrompt (remaining, estimate, x, y) = do
     T.putStrLn (sformat hdrFmt remaining estimate)
-    T.putStrLn ("-- (1) " <> x)
-    T.putStrLn ("-- (2) " <> y)
+    T.putStrLn ("-- (1)\n" <> x)
+    T.putStrLn ("-- (2)\n" <> y)
     T.putStrLn "-- Or [e]dit an entry"
     T.putStrLn "-- Or [u]ndo last comparison"
     T.putStrLn "-- Or [d]elete an entry"

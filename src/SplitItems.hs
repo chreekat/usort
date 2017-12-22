@@ -69,7 +69,7 @@ items input =
             (c:cs) -> findIndices (not . isSpace) (T.unpack c)
         groups = splitItems indices (T.transpose content)
     in  map
-            (T.unlines . map ((T.append (T.replicate blank " ")) . T.dropWhileEnd isSpace))
+            (T.intercalate "\n" . map ((T.append (T.replicate blank " ")) . T.dropWhileEnd isSpace))
             groups
 
 -- | Sort of like multiple splitAts; each i in 'splitItems is' is the start of a
