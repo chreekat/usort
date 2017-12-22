@@ -16,8 +16,8 @@
 ## About
 
 Prioritizing task lists or backlogs is an important part of being organized.
-Even when it isn't strictly required, I find that thinking about priorities to
-be a useful brainstorming device. But what's the best way to do it?
+Even when it isn't strictly required, I find thinking about priorities to be a
+useful brainstorming device. But what's the best way to do it?
 
 Staring at a drag-and-drop list and moving things at random always feels like
 a futile, ineffecient exercise. Have I thought about this thing yet? Wait, did
