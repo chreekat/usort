@@ -1,5 +1,5 @@
 name: usort
-version: '0.2.0.0'
+version: '0.3.0.0'
 synopsis: With usort, the sort is you!
 description: Please see README.md
 category: Web
@@ -24,14 +24,17 @@ library:
   - formatting >=6.2.2
   - haskeline >=0.7.2.1
 executables:
-  usort:
+  insort: &exe
     main: Main.hs
-    source-dirs: app
+    source-dirs: app-insort
     ghc-options:
     - -threaded
     - -O
     dependencies:
     - usort
+  usort:
+    << : *exe
+    source-dirs: app-usort
 tests:
   usort-test:
     main: Test.hs
