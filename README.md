@@ -34,8 +34,8 @@ Sorted! *rimshot*
 
 ### insort
 
-Version 0.3 introduces insort, for sorting top-level [vimin](chreekat/vimin)
-items using standard alphabetic comparison.
+Version 0.3 introduces insort, for sorting top-level [vimin]items using
+standard alphabetic comparison.
 
 ## History
 
@@ -49,3 +49,4 @@ See the [CHANGELOG].
 
 [simple script]: https://github.com/chreekat/bscripts/blob/3f3e6c69bab951ad5d54f9f34e20dd90dfe4b1e7/bryansort
 [sort]: http://perldoc.perl.org/functions/sort.html
+[vimin]: https://github.com/chreekat/vimin
