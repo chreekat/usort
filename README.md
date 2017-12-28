@@ -34,7 +34,7 @@ Sorted! *rimshot*
 
 ### insort
 
-Version 0.3 introduces insort, for sorting top-level [vimin]items using
+Version 0.3 introduces insort, for sorting top-level [vimin] items using
 standard alphabetic comparison.
 
 ## History
