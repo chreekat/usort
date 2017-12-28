@@ -32,6 +32,11 @@ And that's what usort is. Give it a list of items and it will prompt you to
 compare them, one comparison at a time. At the end, it will print out your list.
 Sorted! *rimshot*
 
+### insort
+
+Version 0.3 introduces insort, for sorting top-level [vimin](chreekat/vimin)
+items using standard alphabetic comparison.
+
 ## History
 
 This utility started as a [simple script] using a standard Perl function,
@@ -39,6 +44,8 @@ This utility started as a [simple script] using a standard Perl function,
 years, and only got replaced when I wanted the ability to **edit** items in
 place, **delete** them, or **undo** previous actions. More features are slowly
 being added over time.
+
+See the [CHANGELOG].
 
 [simple script]: https://github.com/chreekat/bscripts/blob/3f3e6c69bab951ad5d54f9f34e20dd90dfe4b1e7/bryansort
 [sort]: http://perldoc.perl.org/functions/sort.html

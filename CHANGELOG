@@ -1,0 +1,4 @@
+* 0.3.0.0
+
+    -  Added insort
+    -  Added ability to sort heirarchical lists (top-level only)
