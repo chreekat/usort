@@ -62,15 +62,26 @@ import Control.Monad.Fix
 -- | Break lines into items
 items :: [Text] -> [Text]
 items input =
-    let (length -> blank, content) =
+    let
+        (blanks, content) =
             span (T.all isSpace) (T.transpose (makeSquare input))
+        numBlank = length blanks
+        assertNoTabs =
+            if all (T.all (/= '\t')) blanks then () else error "Found tabs!"
         indices = case content of
             [] -> []
             (c:cs) -> findIndices (not . isSpace) (T.unpack c)
         groups = splitItems indices (T.transpose content)
-    in  map
-            (T.intercalate "\n" . map ((T.append (T.replicate blank " ")) . T.dropWhileEnd isSpace))
-            groups
+    in
+        assertNoTabs
+            `seq` map
+                      ( T.intercalate "\n"
+                      . map
+                            ( (T.append (T.replicate numBlank " "))
+                            . T.dropWhileEnd isSpace
+                            )
+                      )
+                      groups
 
 -- | Sort of like multiple splitAts; each i in 'splitItems is' is the start of a
 -- new segment.
