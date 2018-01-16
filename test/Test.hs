@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 import Test.Tasty
 import Test.Tasty.QuickCheck
@@ -12,7 +13,6 @@ import Data.List (sort)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Data.ByteString as B
 
 import USort
 import SplitItems
@@ -55,26 +55,30 @@ instance Arbitrary TwoActions where
             <*> scale (min 20) (getNonEmpty <$> arbitrary)
 
 tests :: TestTree
-tests = testGroup "tests"
-    [ testGroup "findNextMerge"
-        [ testCase "empty"  $ findNextMerge [] [] [] [] @?= Left []
-        , testCase "single" $ findNextMerge [] [] [] ["x":|[]] @?= Left ["x"]
+tests = testGroup
+    "tests"
+    [ testGroup
+        "findNextMerge"
+        [ testCase "empty" $ findNextMerge [] [] [] [] @?= Left []
+        , testCase "single" $ findNextMerge [] [] [] ["x" :| []] @?= Left ["x"]
         , testCase "weirdA" $ findNextMerge ["x"] [] [] [] @?= Left ["x"]
         , testCase "weirdL" $ findNextMerge [] ["x"] [] [] @?= Left ["x"]
         , testCase "weirdR" $ findNextMerge [] [] ["x"] [] @?= Left ["x"]
-        , testCase "lastL"  $ findNextMerge ["x"] ["y"] [] [] @?= Left ["x","y"]
-        , testCase "lastR"  $ findNextMerge ["x"] [] ["y"] [] @?= Left ["x","y"]
-        , testProperty "ready" $
-            \a r -> findNextMerge a ["x"] ["y"] r == (Right $ MergeState a ("x":|[]) ("y":|[]) r)
-        , testProperty "lastMergeL" $
-            \(NonEmpty a) r -> findNextMerge a ["x"] [] [r]
-                == Right (MergeState [] r (NE.reverse ("x":|a)) [])
-        , testProperty "lastMergeR" $
-            \(NonEmpty a) r -> findNextMerge a [] ["x"] [r]
-                == Right (MergeState [] r (NE.reverse ("x":|a)) [])
+        , testCase "lastL" $ findNextMerge ["x"] ["y"] [] [] @?= Left ["x", "y"]
+        , testCase "lastR" $ findNextMerge ["x"] [] ["y"] [] @?= Left ["x", "y"]
+        , testProperty "ready" $ \a r ->
+            findNextMerge a ["x"] ["y"] r
+                == (Right $ MergeState a ("x" :| []) ("y" :| []) r)
+        , testProperty "lastMergeL" $ \(NonEmpty a) r ->
+            findNextMerge a ["x"] [] [r]
+                == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
+        , testProperty "lastMergeR" $ \(NonEmpty a) r ->
+            findNextMerge a [] ["x"] [r]
+                == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
         ]
-    , testGroup "processAct"
-        [ testProperty "undo" propUndo
+    , testGroup
+        "processAct"
+        [ testProperty "undo"  propUndo
         , testProperty "editL" propEditL
         , testProperty "editR" propEditR
         ]
@@ -89,12 +93,81 @@ tests = testGroup "tests"
               "golden"
               "test/golden/splitme.golden"
               "test/golden/splitme.out"
-              ( (T.writeFile "test/golden/splitme.out")
-              =<< ( (T.concat . map (\x -> T.unlines ["ITEM", x]) . items . T.lines)
+              (   (T.writeFile "test/golden/splitme.out")
+              =<< (   ( T.concat
+                      . map (\x -> T.unlines ["ITEM", x])
+                      . items
+                      . T.lines
+                      )
                   <$> T.readFile "test/golden/splitme.txt"
                   )
               )
         ]
+    , testCase "mostly sorted input"
+        $ let
+              Right initState =
+                  findNextMerge [] [] [] (NE.group (T.words "e f g a b c"))
+              (snd . unResult -> Right step1) =
+                  processAct [] initState (Choose L) -- e < f
+              (snd . unResult -> Right step2) =
+                  processAct [] step1 (Choose L) -- f < g
+              (snd . unResult -> Right step3) =
+                  processAct [] step2 (Choose R) -- g > a
+              (snd . unResult -> Right step4) =
+                  processAct [] step3 (Choose L) -- a < b
+              (snd . unResult -> Right step5) =
+                  processAct [] step4 (Choose L) -- b < c
+          in
+              do
+                  assertEqual
+                      "initState"
+                      ( MergeState []
+                                   ("e" :| [])
+                                   ("f" :| [])
+                                   (NE.group (T.words ("g a b c")))
+                      )
+                      initState
+                  assertEqual
+                      "step1"
+                      ( MergeState ["e"]
+                                   ("f" :| [])
+                                   ("g" :| [])
+                                   (NE.group (T.words ("a b c")))
+                      )
+                      step1
+                  assertEqual
+                      "step2"
+                      ( MergeState ["f", "e"]
+                                   ("g" :| [])
+                                   ("a" :| [])
+                                   (NE.group (T.words ("b c")))
+                      )
+                      step2
+                  assertEqual
+                      "step3"
+                      ( MergeState
+                          []
+                          ("a" :| [])
+                          ("b" :| [])
+                          ["c" :| [], NE.fromList (T.words "e f g")]
+                      )
+                      step3
+                  assertEqual
+                      "step4"
+                      ( MergeState ["a"]
+                                   ("b" :| [])
+                                   ("c" :| [])
+                                   [NE.fromList (T.words "e f g")]
+                      )
+                      step4
+                  assertEqual
+                      "step5"
+                      ( MergeState []
+                                   (NE.fromList (T.words "e f g"))
+                                   (NE.fromList (T.words "a b c"))
+                                   []
+                      )
+                      step5
     ]
 
 propUndo :: [MergeState] -> TwoActions -> Gen Bool

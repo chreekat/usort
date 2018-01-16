@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 module Types where
 
 import Data.List.NonEmpty (NonEmpty(..))

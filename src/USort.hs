@@ -51,10 +51,23 @@ processAct history st@(MergeState acc (l:|ls) (_:|rs) rest) (Edit R new) =
 processAct [] state Undo = ActResult ([], Right state)
 processAct (s:ss) _ Undo = ActResult (ss, Right s)
 
+-- Assume mostly sorted input during initial pass. It has all one-item NonEmpty lists,
+-- which is how we distinguish it from other cases.
+processAct history st@(MergeState acc (l:|[]) (r:|[]) ((q:|[]):qss)) (Choose L)
+    = ActResult
+        (st : history, Right $ MergeState (l : acc) (r :| []) (q :| []) qss)
+-- Special case: at the end of the input of a totally sorted list!
+processAct history st@(MergeState acc (l:|[]) (r:|[]) []) (Choose L) =
+    ActResult (st : history, Left $ reverse (r : l : acc))
 processAct history st@(MergeState acc (l:|ls) (r:|rs) rest) (Choose L) =
-    ActResult (st : history, findNextMerge (l:acc) ls (r:rs) rest)
+    ActResult (st : history, findNextMerge (l : acc) ls (r : rs) rest)
+-- Break up runs of sorted subsections during initial pass. This "wastes"
+-- one compare by using it to break up the run rather than create a real
+-- merge.
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest) (Choose R) =
+    ActResult (st : history, findNextMerge (l : acc) [] [] ((r :| []) : rest))
 processAct history st@(MergeState acc (l:|ls) (r:|rs) rest) (Choose R) =
-    ActResult (st : history, findNextMerge (r:acc) (l:ls) rs rest)
+    ActResult (st : history, findNextMerge (r : acc) (l : ls) rs rest)
 
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
