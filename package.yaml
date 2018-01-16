@@ -13,6 +13,14 @@ homepage: http://github.com/chreekat/usort#readme
 dependencies:
 - base >=4.7 && <5
 - text >=1.2.2.0
+flags:
+  pedantic:
+    description: "Use -Wall -Werror"
+    manual: true
+    default: false
+when:
+    - condition: flag(pedantic)
+      ghc-options: [-Wall, -Werror]
 library:
   source-dirs: src
   exposed-modules:
@@ -27,9 +35,6 @@ executables:
   insort: &exe
     main: Main.hs
     source-dirs: app-insort
-    ghc-options:
-    - -threaded
-    - -O
     dependencies:
     - usort
   usort:
@@ -41,7 +46,6 @@ tests:
     source-dirs: test
     ghc-options:
     - -threaded
-    - -O
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
