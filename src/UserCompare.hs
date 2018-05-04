@@ -60,12 +60,30 @@ replaceText t = do
 
 printPrompt :: (Int, Int, Text, Text) -> IO ()
 printPrompt (remaining, estimate, x, y) = do
-    T.putStrLn (sformat hdrFmt remaining estimate)
-    T.putStrLn ("-- (1)\n" <> x)
-    T.putStrLn ("-- (2)\n" <> y)
-    T.putStrLn "-- Or [e]dit an entry"
-    T.putStrLn "-- Or [u]ndo last comparison"
-    T.putStrLn "-- Or [d]elete an entry"
+    mapM_
+        T.putStrLn
+        [ "############################################################"
+        , "############################################################"
+        , sformat hdrFmt remaining estimate
+        , "### [1] ####################################################"
+        , ""
+        , xSummary
+        , ""
+        , "### [2] ####################################################"
+        , ""
+        , ySummary
+        , ""
+        , "-- Or [e]dit an entry"
+        , "-- Or [u]ndo last comparison"
+        , "-- Or [d]elete an entry"
+        ]
     T.putStr "-> "
   where
-    hdrFmt = "(~" % int % "/" % int % ") Which is more important?"
+    [xSummary, ySummary] = map shorten [x, y]
+    shorten s = T.append summ ellipsis
+      where
+        (summ, rem) = T.breakOn "\n" s
+        ellipsis
+            | T.null rem = ""
+            | otherwise = "…"
+    hdrFmt = "##### (~" % int % "/" % int % ")    Which is more important?    ############"

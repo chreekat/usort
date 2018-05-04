@@ -1,9 +1,13 @@
+* 0.4.1.0
+
+    * New output format
+
 * 0.4.0.0
 
-    -  Optimized for mostly-sorted input
-    -  Assert no tabs are used to indent heirarchical lists
+    * Optimized for mostly-sorted input
+    * Assert no tabs are used to indent heirarchical lists
 
 * 0.3.0.0
 
-    -  Added insort
-    -  Added ability to sort heirarchical lists (top-level only)
+    * Added insort
+    * Added ability to sort heirarchical lists (top-level only)
