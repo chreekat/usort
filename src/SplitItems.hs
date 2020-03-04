@@ -51,7 +51,7 @@ Oh wait, we already have Data.List.transpose. Heh.
 Then we just need to find the indices that start elements.
 -}
 
-module SplitItems (items) where
+module SplitItems (splitItems, Items(..)) where
 
 import Data.List
 import Data.Char
@@ -59,9 +59,12 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Control.Monad.Fix
 
+data Items = Items { leftMargin :: Int, items :: [Text] }
+    deriving (Eq, Show)
+
 -- | Break lines into items
-items :: [Text] -> [Text]
-items input =
+splitItems :: [Text] -> Items
+splitItems input =
     let
         (blanks, content) =
             span (T.all isSpace) (T.transpose (makeSquare input))
@@ -71,22 +74,23 @@ items input =
         indices = case content of
             [] -> []
             (c:cs) -> findIndices (not . isSpace) (T.unpack c)
-        groups = splitItems indices (T.transpose content)
+        groups = splitSegments indices (T.transpose content)
     in
-        assertNoTabs
-            `seq` map
-                      ( T.intercalate "\n"
-                      . map
-                            ( (T.append (T.replicate numBlank " "))
-                            . T.dropWhileEnd isSpace
-                            )
-                      )
-                      groups
+        Items numBlank
+            (assertNoTabs
+                `seq` map
+                        ( T.intercalate "\n"
+                        . map
+                                ( (T.append (T.replicate numBlank " "))
+                                . T.dropWhileEnd isSpace
+                                )
+                        )
+                        groups)
 
--- | Sort of like multiple splitAts; each i in 'splitItems is' is the start of a
--- new segment.
-splitItems :: [Int] -> [a] -> [[a]]
-splitItems is xs = fix f is
+-- | Sort of like multiple splitAts; each i in 'splitSegments is' is the start
+-- of a new segment.
+splitSegments :: [Int] -> [a] -> [[a]]
+splitSegments is xs = fix f is
   where
     f _ [] = [xs]
     f _ [i] = [drop i xs]
@@ -97,4 +101,5 @@ slice begin ct = take ct . drop begin
 
 makeSquare :: [Text] -> [Text]
 makeSquare [] = []
-makeSquare ls = let x = maximum (map T.length ls) in map (T.justifyLeft x ' ') ls
+makeSquare ls =
+    let x = maximum (map T.length ls) in map (T.justifyLeft x ' ') ls

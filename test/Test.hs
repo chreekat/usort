@@ -118,6 +118,7 @@ tests = testGroup
               =<< (   ( T.concat
                       . map (\x -> T.unlines ["ITEM", x])
                       . items
+                      . splitItems
                       . T.lines
                       )
                   <$> T.readFile "test/golden/splitme.txt"
