@@ -1,3 +1,4 @@
 test/golden/*.out
 dist
 dist-newstyle
+errors.err
