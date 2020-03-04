@@ -9,12 +9,14 @@
  -
  -}
 
+{-# LANGUAGE DeriveGeneric #-}
 module USort (module Types, module USort) where
 
 import Control.Monad.Fix
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
+import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
 import Types
@@ -25,7 +27,7 @@ data Choice = L | R
 
 -- | Merge actions (things a user may do)
 data Action = Choose Choice | Delete Choice | Edit Choice Text | Undo
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
 
 -- | Holds the new history and the next merge state.
 newtype ActResult = ActResult { unResult :: ([MergeState], Either [Text] MergeState) }

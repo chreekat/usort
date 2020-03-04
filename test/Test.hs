@@ -1,6 +1,6 @@
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 import Test.Tasty
@@ -13,6 +13,7 @@ import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
 import Data.List (sort, zipWith4)
 import Data.Text (Text)
+import GHC.Generics
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -47,7 +48,8 @@ instance Arbitrary a => Arbitrary (NonEmpty a) where
 instance Arbitrary Text where
     -- | An alphabetic string of up to 7 charaters
     arbitrary = T.pack <$> scale (min 7) (listOf1 (elements ['a'..'z']))
-    shrink = map T.pack . genericShrink . T.unpack
+    -- | Shrink from ""
+    shrink = init . T.inits
 
 instance Arbitrary Action where
     arbitrary = oneof
@@ -57,7 +59,11 @@ instance Arbitrary Action where
         , pure Undo
         ]
 
-instance Arbitrary Choice where arbitrary = elements [L, R]
+instance Arbitrary Choice where
+    arbitrary = elements [L, R]
+    -- Shrink to L
+    shrink R = [L]
+    shrink L = []
 
 main :: IO ()
 main = defaultMain tests
@@ -74,6 +80,7 @@ instance Arbitrary TwoActions where
             <*> arbitrary
             <*> arbitrary
             <*> scale (min 20) (getNonEmpty <$> arbitrary)
+    shrink (TwoActions ms) = map TwoActions (genericShrink ms)
 
 tests :: TestTree
 tests = testGroup
