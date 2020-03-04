@@ -1,10 +1,6 @@
-cabal-version: 1.12
-
--- This file has been generated from package.yaml by hpack version 0.31.2.
+-- This file has been generated from package.yaml by hpack version 0.18.1.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: 0a5de0884394cfc84e6ca383578b1b22aaf670c0c88032e3fbf13a36bed68c61
 
 name:           usort
 version:        0.4.1.0
@@ -19,6 +15,7 @@ copyright:      Bryan Richter
 license:        AGPL-3
 license-file:   LICENSE.md
 build-type:     Simple
+cabal-version:  >= 1.10
 
 source-repository head
   type: git
@@ -34,9 +31,9 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , text >=1.2.2.0
     , formatting >=6.2.2
     , haskeline >=0.7.2.1
-    , text >=1.2.2.0
   if flag(pedantic)
     ghc-options: -Wall -Werror
   exposed-modules:
@@ -50,8 +47,6 @@ library
 
 executable insort
   main-is: Main.hs
-  other-modules:
-      Paths_usort
   hs-source-dirs:
       app-insort
   build-depends:
@@ -64,8 +59,6 @@ executable insort
 
 executable usort
   main-is: Main.hs
-  other-modules:
-      Paths_usort
   hs-source-dirs:
       app-usort
   build-depends:
@@ -79,20 +72,18 @@ executable usort
 test-suite usort-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
-  other-modules:
-      Paths_usort
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
-    , bytestring
-    , tasty
-    , tasty-golden
-    , tasty-hunit
-    , tasty-quickcheck
     , text >=1.2.2.0
+    , bytestring
     , usort
+    , tasty
+    , tasty-quickcheck
+    , tasty-hunit
+    , tasty-golden
   if flag(pedantic)
     ghc-options: -Wall -Werror
   default-language: Haskell2010

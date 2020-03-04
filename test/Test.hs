@@ -1,10 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-import GHC.Generics
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
@@ -21,26 +17,16 @@ import qualified Data.Text.IO as T
 import USort
 import SplitItems
 
-deriving instance Generic MergeState
-deriving instance Generic Action
-
 instance Arbitrary MergeState where
     arbitrary =
         MergeState <$> arbitrary
               <*> arbitrary
               <*> arbitrary
               <*> scale (min 20) arbitrary
-    shrink = genericShrink
-
-instance Arbitrary a => Arbitrary (NonEmpty a) where
-    arbitrary = fmap (NE.fromList . getNonEmpty) arbitrary
-    shrink = fmap NE.fromList . filter (not . null) . shrinkList shrink . NE.toList
 
 instance Arbitrary Text where
     -- | An alphabetic string of up to 7 charaters
     arbitrary = T.pack <$> scale (min 7) (listOf1 (elements ['a'..'z']))
-    -- | Shrink to ""
-    shrink = tail . T.tails
 
 instance Arbitrary Action where
     arbitrary = oneof
@@ -49,20 +35,15 @@ instance Arbitrary Action where
         , Edit <$> arbitrary <*> arbitrary
         , pure Undo
         ]
-    shrink = genericShrink
 
-instance Arbitrary Choice where
-    arbitrary = elements [L, R]
-    -- shrink to L
-    shrink R = [L]
-    shrink L = []
+instance Arbitrary Choice where arbitrary = elements [L, R]
 
 main :: IO ()
 main = defaultMain tests
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
 newtype TwoActions = TwoActions MergeState
-    deriving (Eq, Show, Generic)
+    deriving (Eq, Show)
 
 instance Arbitrary TwoActions where
     arbitrary =
@@ -72,7 +53,6 @@ instance Arbitrary TwoActions where
             <*> arbitrary
             <*> arbitrary
             <*> scale (min 20) (getNonEmpty <$> arbitrary)
-    shrink = genericShrink
 
 tests :: TestTree
 tests = testGroup
