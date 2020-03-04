@@ -1,2 +1,3 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc802" }:
-nixpkgs.haskellPackages.callPackage ./package.nix { }
+{ nixpkgs ? import <nixpkgs> {} }:
+let h = nixpkgs.haskell.lib;
+in (nixpkgs.haskellPackages.callPackage ./package.nix { })
