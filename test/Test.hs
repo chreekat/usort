@@ -1,3 +1,5 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -9,7 +11,7 @@ import Test.Tasty.Golden
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
-import Data.List (sort)
+import Data.List (sort, zipWith4)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -24,9 +26,28 @@ instance Arbitrary MergeState where
               <*> arbitrary
               <*> scale (min 20) arbitrary
 
+    shrink x = shrinkToEmpty x ++ genericShrink x
+      where
+        shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) []) = []
+        shrinkToEmpty (MergeState _ (l:|_) (r:|_) _)
+            = [MergeState [] (l:|[]) (r:|[]) []]
+
+instance Arbitrary a => Arbitrary (NonEmpty a) where
+    arbitrary = do
+        xs <- getNonEmpty <$> arbitrary
+        case xs of
+            (x:xs) -> pure (x :| xs)
+            _ -> error "Impopsicle"
+
+    shrink x = shrinkToOne x ++ genericShrink x
+      where
+        shrinkToOne (_:|[]) = []
+        shrinkToOne (y:|_) = [(y:|[])]
+
 instance Arbitrary Text where
     -- | An alphabetic string of up to 7 charaters
     arbitrary = T.pack <$> scale (min 7) (listOf1 (elements ['a'..'z']))
+    shrink = map T.pack . genericShrink . T.unpack
 
 instance Arbitrary Action where
     arbitrary = oneof

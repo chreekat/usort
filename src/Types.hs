@@ -1,5 +1,7 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Types where
 
+import GHC.Generics
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 
@@ -13,4 +15,4 @@ data MergeState = MergeState
         , _strest :: [NonEmpty Text]
           -- ^ lists left to process
         }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
