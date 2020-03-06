@@ -25,33 +25,33 @@ data Choice = L | R
     deriving (Eq, Show)
 
 -- | Merge actions (things a user may do)
-data Action = Choose Choice | Delete Choice | Edit Choice Text | Undo
+data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo
     deriving (Eq, Show, Generic)
 
 -- | In the midst of a merge, this is the state to act upon.
-data MergeState = MergeState
-        { _stacc :: [Text]
+data MergeState a = MergeState
+        { _stacc :: [a]
           -- ^ accumulator for current merge
-        , _stleft :: NonEmpty Text
+        , _stleft :: NonEmpty a
           -- ^ left workspace
-        , _stright :: NonEmpty Text
+        , _stright :: NonEmpty a
           -- ^ right workspace
-        , _strest :: [NonEmpty Text]
+        , _strest :: [NonEmpty a]
           -- ^ lists left to process
         }
     deriving (Eq, Show, Generic)
 
 -- | Holds the new history and the next merge state.
-newtype ActResult
-    = ActResult { unResult :: ([MergeState], Either [Text] MergeState) }
+newtype ActResult a
+    = ActResult { unResult :: ([MergeState a], Either [a] (MergeState a)) }
     deriving (Eq, Show)
 
 -- | Process given action given a history and current state.
 processAct
-    :: [MergeState] -- ^ history
-    -> MergeState -- ^ current
-    -> Action -- ^ to be processed
-    -> ActResult
+    :: [MergeState a] -- ^ history
+    -> MergeState a -- ^ current
+    -> Action a -- ^ to be processed
+    -> ActResult a
 
 processAct history st@(MergeState acc (_:|ls) (r:|rs) rest) (Delete L)
     = ActResult (st : history, findNextMerge acc ls (r:rs) rest)
@@ -87,11 +87,11 @@ processAct history st@(MergeState acc (l:|ls) (r:|rs) rest) (Choose R)
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
 findNextMerge
-    :: [Text] -- ^ accumulator for current merge
-    -> [Text] -- ^ left merge workspace
-    -> [Text] -- ^ right merge workspace
-    -> [NonEmpty Text] -- ^ lists that have yet to be merged
-    -> Either [Text] MergeState
+    :: [a] -- ^ accumulator for current merge
+    -> [a] -- ^ left merge workspace
+    -> [a] -- ^ right merge workspace
+    -> [NonEmpty a] -- ^ lists that have yet to be merged
+    -> Either [a] (MergeState a)
 findNextMerge w x y z = fix f w x y z
     where
     -- start populating workspace
@@ -111,9 +111,9 @@ findNextMerge w x y z = fix f w x y z
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort :: Monad m
-    => (MergeState -> m Action) -- ^ Produces an Action
-    -> [Text] -- ^ Input list
-    -> m [Text]
+    => (MergeState a -> m (Action a)) -- ^ Produces an Action
+    -> [a] -- ^ Input list
+    -> m [a]
 usort getAct xs =
     fix f (ActResult ([], findNextMerge [] [] [] (map (:|[]) xs)))
     where
@@ -121,6 +121,6 @@ usort getAct xs =
     f nxt (ActResult (h, Right state))
         = getAct state >>= (nxt . processAct h state)
 
-realCompare :: Applicative f => MergeState -> f Action
+realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
 realCompare (MergeState _ (l:|_) (r:|_) _)
     = pure $ Choose $ if l <= r then L else R

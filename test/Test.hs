@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 import Test.Tasty
@@ -20,7 +21,7 @@ import qualified Data.Text.IO as T
 import USort
 import SplitItems
 
-instance Arbitrary MergeState where
+instance Arbitrary a => Arbitrary (MergeState a) where
     arbitrary =
         MergeState <$> arbitrary
               <*> arbitrary
@@ -51,7 +52,7 @@ instance Arbitrary Text where
     -- | Shrink from ""
     shrink = init . T.inits
 
-instance Arbitrary Action where
+instance Arbitrary a => Arbitrary (Action a) where
     arbitrary = oneof
         [ Choose <$> arbitrary
         , Delete <$> arbitrary
@@ -69,10 +70,10 @@ main :: IO ()
 main = defaultMain tests
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
-newtype TwoActions = TwoActions MergeState
+newtype TwoActions a = TwoActions (MergeState a)
     deriving (Eq, Show)
 
-instance Arbitrary TwoActions where
+instance Arbitrary a => Arbitrary (TwoActions a) where
     arbitrary =
         fmap TwoActions
             $ MergeState
@@ -87,7 +88,7 @@ tests = testGroup
     "tests"
     [ testGroup
         "findNextMerge"
-        [ testCase "empty" $ findNextMerge [] [] [] [] @?= Left []
+        [ testCase "empty" $ findNextMerge @Text [] [] [] [] @?= Left []
         , testCase "single" $ findNextMerge [] [] [] ["x" :| []] @?= Left ["x"]
         , testCase "weirdA" $ findNextMerge ["x"] [] [] [] @?= Left ["x"]
         , testCase "weirdL" $ findNextMerge [] ["x"] [] [] @?= Left ["x"]
@@ -95,13 +96,13 @@ tests = testGroup
         , testCase "lastL" $ findNextMerge ["x"] ["y"] [] [] @?= Left ["x", "y"]
         , testCase "lastR" $ findNextMerge ["x"] [] ["y"] [] @?= Left ["x", "y"]
         , testProperty "ready" $ \a r ->
-            findNextMerge a ["x"] ["y"] r
+            findNextMerge @Text a ["x"] ["y"] r
                 == (Right $ MergeState a ("x" :| []) ("y" :| []) r)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
-            findNextMerge a ["x"] [] [r]
+            findNextMerge @Text a ["x"] [] [r]
                 == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
         , testProperty "lastMergeR" $ \(NonEmpty a) r ->
-            findNextMerge a [] ["x"] [r]
+            findNextMerge @Text a [] ["x"] [r]
                 == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
         ]
     , testGroup
@@ -113,7 +114,7 @@ tests = testGroup
     , testGroup
         "sort"
         [ testProperty "realSort"
-              $ \xs -> Identity (sort xs) == usort realCompare xs
+              $ \xs -> Identity (sort @Text xs) == usort realCompare xs
         ]
     , testGroup
         "splitting items"
@@ -199,7 +200,7 @@ tests = testGroup
                       step5
     ]
 
-propUndo :: [MergeState] -> TwoActions -> Gen Bool
+propUndo :: [MergeState Text] -> TwoActions Text -> Gen Bool
 propUndo h (TwoActions st) = do
     act <- oneof
         [ Choose <$> arbitrary
@@ -210,7 +211,7 @@ propUndo h (TwoActions st) = do
         ActResult (h', Right st') = processAct newHist newState Undo
     pure $ h == h' && st == st'
 
-propEditL, propEditR :: [MergeState] -> MergeState -> Text -> Bool
+propEditL, propEditR :: [MergeState Text] -> MergeState Text -> Text -> Bool
 propEditL h st@(MergeState _ (_:|ys) _ _) x =
     let ActResult (h', Right st') = processAct h st (Edit L x)
     in h' == (st:h) && st { _stleft = x:|ys } == st'

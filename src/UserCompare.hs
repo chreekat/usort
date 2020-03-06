@@ -10,7 +10,7 @@ import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-userCompare :: MergeState -> IO Action
+userCompare :: MergeState Text -> IO (Action Text)
 userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
     printPrompt (remain, est, l, r)
     c <- getResponse
