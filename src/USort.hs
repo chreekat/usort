@@ -11,7 +11,7 @@
  -}
 
 {-# LANGUAGE DeriveGeneric #-}
-module USort (module Types, module USort) where
+module USort where
 
 import Control.Monad.Fix
 import Data.Foldable (toList)
@@ -20,14 +20,25 @@ import Data.Text (Text)
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
-import Types
-
 -- | Decisions, decisions.
 data Choice = L | R
     deriving (Eq, Show)
 
 -- | Merge actions (things a user may do)
 data Action = Choose Choice | Delete Choice | Edit Choice Text | Undo
+    deriving (Eq, Show, Generic)
+
+-- | In the midst of a merge, this is the state to act upon.
+data MergeState = MergeState
+        { _stacc :: [Text]
+          -- ^ accumulator for current merge
+        , _stleft :: NonEmpty Text
+          -- ^ left workspace
+        , _stright :: NonEmpty Text
+          -- ^ right workspace
+        , _strest :: [NonEmpty Text]
+          -- ^ lists left to process
+        }
     deriving (Eq, Show, Generic)
 
 -- | Holds the new history and the next merge state.

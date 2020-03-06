@@ -35,7 +35,6 @@ library
       App
       USort
       UserCompare
-      Types
       SplitItems
   default-language: Haskell2010
 
