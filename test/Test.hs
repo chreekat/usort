@@ -22,17 +22,31 @@ import USort
 import SplitItems
 
 instance Arbitrary a => Arbitrary (MergeState a) where
-    arbitrary =
-        MergeState <$> arbitrary
-              <*> arbitrary
-              <*> arbitrary
-              <*> scale (min 20) arbitrary
+    arbitrary
+        = MergeState
+            <$> arbitrary
+            <*> arbitrary
+            <*> arbitrary
+            <*> listOf (scale (round . sqrt . fromIntegral) arbitrary)
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
         shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) []) = []
         shrinkToEmpty (MergeState _ (l:|_) (r:|_) _)
             = [MergeState [] (l:|[]) (r:|[]) []]
+
+-- | A state that has at least two actions remaining, allowing for testing undo.
+--
+-- Ensuring "at least two actions" just means there's at least one element in
+-- rest, since there's always at least one action left: comparing the heads of
+-- left and right.
+newtype TwoActions a = TwoActions (MergeState a)
+    deriving (Eq, Show)
+
+instance Arbitrary a => Arbitrary (TwoActions a) where
+    arbitrary =
+        fmap TwoActions (arbitrary `suchThat` (not . null . rest))
+    shrink (TwoActions ms) = map TwoActions (shrink ms)
 
 instance Arbitrary a => Arbitrary (NonEmpty a) where
     arbitrary = do
@@ -45,12 +59,6 @@ instance Arbitrary a => Arbitrary (NonEmpty a) where
       where
         shrinkToOne (_:|[]) = []
         shrinkToOne (y:|_) = [(y:|[])]
-
-instance Arbitrary Text where
-    -- | An alphabetic string of up to 7 charaters
-    arbitrary = T.pack <$> scale (min 7) (listOf1 (elements ['a'..'z']))
-    -- | Shrink from ""
-    shrink = init . T.inits
 
 instance Arbitrary a => Arbitrary (Action a) where
     arbitrary = oneof
@@ -69,41 +77,27 @@ instance Arbitrary Choice where
 main :: IO ()
 main = defaultMain tests
 
--- | A state that has at least two actions remaining, allowing for testing undo.
-newtype TwoActions a = TwoActions (MergeState a)
-    deriving (Eq, Show)
-
-instance Arbitrary a => Arbitrary (TwoActions a) where
-    arbitrary =
-        fmap TwoActions
-            $ MergeState
-            <$> arbitrary
-            <*> arbitrary
-            <*> arbitrary
-            <*> scale (min 20) (getNonEmpty <$> arbitrary)
-    shrink (TwoActions ms) = map TwoActions (genericShrink ms)
-
 tests :: TestTree
 tests = testGroup
     "tests"
     [ testGroup
         "findNextMerge"
-        [ testCase "empty" $ findNextMerge @Text [] [] [] [] @?= Left []
-        , testCase "single" $ findNextMerge [] [] [] ["x" :| []] @?= Left ["x"]
-        , testCase "weirdA" $ findNextMerge ["x"] [] [] [] @?= Left ["x"]
-        , testCase "weirdL" $ findNextMerge [] ["x"] [] [] @?= Left ["x"]
-        , testCase "weirdR" $ findNextMerge [] [] ["x"] [] @?= Left ["x"]
-        , testCase "lastL" $ findNextMerge ["x"] ["y"] [] [] @?= Left ["x", "y"]
-        , testCase "lastR" $ findNextMerge ["x"] [] ["y"] [] @?= Left ["x", "y"]
+        [ testCase "empty" $ findNextMerge @() [] [] [] [] @?= Left []
+        , testCase "single" $ findNextMerge [] [] [] [42 :| []] @?= Left [42]
+        , testCase "weirdA" $ findNextMerge [42] [] [] [] @?= Left [42]
+        , testCase "weirdL" $ findNextMerge [] [42] [] [] @?= Left [42]
+        , testCase "weirdR" $ findNextMerge [] [] [42] [] @?= Left [42]
+        , testCase "lastL" $ findNextMerge [42] [47] [] [] @?= Left [42, 47]
+        , testCase "lastR" $ findNextMerge [42] [] [47] [] @?= Left [42, 47]
         , testProperty "ready" $ \a r ->
-            findNextMerge @Text a ["x"] ["y"] r
-                == (Right $ MergeState a ("x" :| []) ("y" :| []) r)
+            findNextMerge @Int a [42] [47] r
+                == (Right $ MergeState a (42 :| []) (47 :| []) r)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
-            findNextMerge @Text a ["x"] [] [r]
-                == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
+            findNextMerge @Int a [42] [] [r]
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [])
         , testProperty "lastMergeR" $ \(NonEmpty a) r ->
-            findNextMerge @Text a [] ["x"] [r]
-                == Right (MergeState [] r (NE.reverse ("x" :| a)) [])
+            findNextMerge @Int a [] [42] [r]
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [])
         ]
     , testGroup
         "processAct"
@@ -114,7 +108,7 @@ tests = testGroup
     , testGroup
         "sort"
         [ testProperty "realSort"
-              $ \xs -> Identity (sort @Text xs) == usort realCompare xs
+              $ \xs -> Identity (sort @Int xs) == usort realCompare xs
         ]
     , testGroup
         "splitting items"
@@ -200,8 +194,8 @@ tests = testGroup
                       step5
     ]
 
-propUndo :: [MergeState Text] -> TwoActions Text -> Gen Bool
-propUndo h (TwoActions st) = do
+propUndo :: [MergeState Int] -> TwoActions Int -> Property
+propUndo h (TwoActions st) = property $ do
     act <- oneof
         [ Choose <$> arbitrary
         , Delete <$> arbitrary
@@ -211,13 +205,12 @@ propUndo h (TwoActions st) = do
         ActResult (h', Right st') = processAct newHist newState Undo
     pure $ h == h' && st == st'
 
-propEditL, propEditR :: [MergeState Text] -> MergeState Text -> Text -> Bool
+propEditL, propEditR :: [MergeState Int] -> MergeState Int -> Int -> Property
 propEditL h st@(MergeState _ (_:|ys) _ _) x =
     let ActResult (h', Right st') = processAct h st (Edit L x)
-    in h' == (st:h) && st { _stleft = x:|ys } == st'
+    in property $ h' == (st:h) && st { left = x:|ys } == st'
 propEditR h st@(MergeState _ _ (_:|ys) _) x =
     let ActResult (h', Right st') = processAct h st (Edit R x)
-    in h' == (st:h) && st { _stright = x:|ys } == st'
+    in property $ h' == (st:h) && st { right = x:|ys } == st'
 
 -- Ok i'm tired. Could use more tests of processAct, though.
-

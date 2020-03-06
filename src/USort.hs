@@ -30,15 +30,15 @@ data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo
 
 -- | In the midst of a merge, this is the state to act upon.
 data MergeState a = MergeState
-        { _stacc :: [a]
-          -- ^ accumulator for current merge
-        , _stleft :: NonEmpty a
-          -- ^ left workspace
-        , _stright :: NonEmpty a
-          -- ^ right workspace
-        , _strest :: [NonEmpty a]
-          -- ^ lists left to process
-        }
+    { acc :: [a]
+    -- ^ accumulator for current merge
+    , left :: NonEmpty a
+    -- ^ left workspace
+    , right :: NonEmpty a
+    -- ^ right workspace
+    , rest :: [NonEmpty a]
+    -- ^ lists left to process
+    }
     deriving (Eq, Show, Generic)
 
 -- | Holds the new history and the next merge state.

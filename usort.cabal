@@ -71,6 +71,8 @@ test-suite usort-test
   build-depends:
       base
     , bytestring
+    -- wat? doesn't show up in `cabal repl usort:usort-test`
+    , QuickCheck
     , tasty
     , tasty-golden
     , tasty-hunit
