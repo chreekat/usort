@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -73,7 +72,7 @@ splitItems input =
             if all (T.all (/= '\t')) blanks then () else error "Found tabs!"
         indices = case content of
             [] -> []
-            (c:cs) -> findIndices (not . isSpace) (T.unpack c)
+            (c:_) -> findIndices (not . isSpace) (T.unpack c)
         groups = splitSegments indices (T.transpose content)
     in
         Items numBlank
@@ -81,7 +80,7 @@ splitItems input =
                 `seq` map
                         ( T.intercalate "\n"
                         . map
-                                ( (T.append (T.replicate numBlank " "))
+                                ( T.append (T.replicate numBlank " ")
                                 . T.dropWhileEnd isSpace
                                 )
                         )
@@ -94,7 +93,7 @@ splitSegments is xs = fix f is
   where
     f _ [] = [xs]
     f _ [i] = [drop i xs]
-    f nxt (i:j:is) = slice i (j - i) xs : nxt (j : is)
+    f nxt (i:j:iss) = slice i (j - i) xs : nxt (j : iss)
 
 slice :: Int -> Int -> [a] -> [a]
 slice begin ct = take ct . drop begin

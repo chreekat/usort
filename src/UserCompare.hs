@@ -2,7 +2,6 @@
 module UserCompare (userCompare) where
 
 import USort
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.List.NonEmpty (NonEmpty(..))
 import Formatting
@@ -10,9 +9,9 @@ import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-userCompare :: MergeState -> IO Action
-userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
-    printPrompt (remain, est, l, r)
+userCompare :: MergeState Text -> IO (Action Text)
+userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt est)) = do
+    printPrompt (dspCnt, est, l, r)
     c <- getResponse
     case c of
         '1' -> pure $ Choose L
@@ -21,9 +20,6 @@ userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
         'e' -> either (Edit L) (Edit R) <$> editItem l r
         'u' -> pure Undo
         _   -> unknownCommand (userCompare m)
-  where
-    remain = 999
-    est = 333
 
 getResponse :: IO Char
 getResponse = getChar <* putStrLn ""
@@ -82,8 +78,8 @@ printPrompt (remaining, estimate, x, y) = do
     [xSummary, ySummary] = map shorten [x, y]
     shorten s = T.append summ ellipsis
       where
-        (summ, rem) = T.breakOn "\n" s
+        (summ, remm) = T.breakOn "\n" s
         ellipsis
-            | T.null rem = ""
+            | T.null remm = ""
             | otherwise = "…"
-    hdrFmt = "##### (~" % int % "/" % int % ")    Which is more important?    ############"
+    hdrFmt = "##### (" % int % " of ~" % int % ")    Which is more important?    ############"

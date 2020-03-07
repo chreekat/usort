@@ -11,10 +11,9 @@ import Data.Text.IO
 import qualified Data.Text as T
 
 import USort
-import UserCompare
 import SplitItems
 
-main :: (MergeState -> IO Action) -> IO ()
+main :: (MergeState Text -> IO (Action Text)) -> IO ()
 main sortFn = do
     as <- getArgs
     (Items b is) <- splitItems . lines <$> case as of
