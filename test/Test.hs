@@ -21,13 +21,16 @@ import qualified Data.Text.IO as T
 import USort
 import SplitItems
 
+-- | Size parameter is taken to mean "order of the number of elements left to be
+-- sorted"
 instance Arbitrary a => Arbitrary (MergeState a) where
     arbitrary
         = MergeState
             <$> arbitrary
             <*> arbitrary
             <*> arbitrary
-            <*> listOf (scale (round . sqrt . fromIntegral) arbitrary)
+            <*> scale (round . sqrt . fromIntegral) arbitrary
+            -- ^ sqrt(n) lists of size (sqrt n)
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
@@ -48,17 +51,23 @@ instance Arbitrary a => Arbitrary (TwoActions a) where
         fmap TwoActions (arbitrary `suchThat` (not . null . rest))
     shrink (TwoActions ms) = map TwoActions (shrink ms)
 
-instance Arbitrary a => Arbitrary (NonEmpty a) where
-    arbitrary = do
-        xs <- getNonEmpty <$> arbitrary
-        case xs of
-            (x:xs) -> pure (x :| xs)
-            _ -> error "Impopsicle"
+-- | An action that is not Undo.
+newtype NotUndo a = NotUndo (Action a)
+    deriving (Eq, Show)
 
-    shrink x = shrinkToOne x ++ genericShrink x
-      where
-        shrinkToOne (_:|[]) = []
-        shrinkToOne (y:|_) = [(y:|[])]
+instance (Arbitrary a) => Arbitrary (NotUndo a) where
+    arbitrary = fmap NotUndo (arbitrary `suchThat` notUndo)
+        where
+            -- Avoid Eq constraint
+            notUndo Undo = False
+            notUndo _ = True
+    shrink (NotUndo act) = map NotUndo (shrink act)
+
+instance Arbitrary a => Arbitrary (NonEmpty a) where
+    arbitrary = fmap (NE.fromList . getNonEmpty) arbitrary
+
+    -- This is totally some kind of cofold or whatever.
+    shrink = map (NE.fromList . getNonEmpty) . shrink . NonEmpty . NE.toList
 
 instance Arbitrary a => Arbitrary (Action a) where
     arbitrary = oneof
@@ -192,18 +201,14 @@ tests = testGroup
                                    []
                       )
                       step5
+    , testCase "counts comparisons correctly" $ pure ()
     ]
 
-propUndo :: [MergeState Int] -> TwoActions Int -> Property
-propUndo h (TwoActions st) = property $ do
-    act <- oneof
-        [ Choose <$> arbitrary
-        , Delete <$> arbitrary
-        , Edit <$> arbitrary <*> arbitrary
-        ]
+propUndo :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Bool
+propUndo h (TwoActions st) (NotUndo act) =
     let ActResult (newHist, (Right newState)) = processAct h st act
         ActResult (h', Right st') = processAct newHist newState Undo
-    pure $ h == h' && st == st'
+    in h == h' && st == st'
 
 propEditL, propEditR :: [MergeState Int] -> MergeState Int -> Int -> Property
 propEditL h st@(MergeState _ (_:|ys) _ _) x =
