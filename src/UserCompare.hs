@@ -11,8 +11,8 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 userCompare :: MergeState Text -> IO (Action Text)
-userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
-    printPrompt (remain, est, l, r)
+userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt)) = do
+    printPrompt (remain, dspCnt, l, r)
     c <- getResponse
     case c of
         '1' -> pure $ Choose L
@@ -23,7 +23,6 @@ userCompare m@(MergeState _ (l:|_) (r:|_) _) = do
         _   -> unknownCommand (userCompare m)
   where
     remain = 999
-    est = 333
 
 getResponse :: IO Char
 getResponse = getChar <* putStrLn ""
