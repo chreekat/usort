@@ -115,9 +115,16 @@ processAct
             (r : rs)
             rest
             (succCnt ds))
+
 -- Break up runs of sorted subsections during initial pass. This "wastes"
 -- one compare by using it to break up the run rather than create a real
--- merge.
+-- merge. Can we do better? Yes, by enriching the items with identifiers, and
+-- tracking already-compared items. This would make deleting and adding items
+-- kind of a pain, but not horrific. In the meanwhile, the pain of re-comparing
+-- things already compared is too great to keep, so this is getting commented
+-- away for now. But wait, no it isn't! I have too many overlapping patterns,
+-- and commenting this one case out causes the program to have wrong behavior.
+-- Another day, then.
 processAct
     history
     st@(MergeState acc (l:|[]) (r:|[]) rest ds)
