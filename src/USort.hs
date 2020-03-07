@@ -11,6 +11,7 @@
  -}
 
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module USort where
 
 import Control.Monad.Fix
@@ -30,6 +31,7 @@ data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo
 -- | Data relevant for the UI, but not the merge itself.
 data DisplayState = DisplayState
     { numActs :: Int
+    , estActs :: Int
     }
     deriving (Eq, Show, Generic)
 
@@ -87,7 +89,7 @@ processAct (s:ss) _ Undo = ActResult ss (Right s)
 -- lists, which is how we distinguish it from other cases.
 processAct
     history
-    st@(MergeState acc (l:|[]) (r:|[]) ((q:|[]):qss) (DisplayState dsCnt))
+    st@(MergeState acc (l:|[]) (r:|[]) ((q:|[]):qss) ds)
     (Choose L)
     = ActResult
         (st : history)
@@ -97,13 +99,13 @@ processAct
                 (r :| [])
                 (q :| [])
                 qss
-                (DisplayState (succ dsCnt))))
+                (succCnt ds)))
 -- Special case: at the end of the input of a totally sorted list!
 processAct history st@(MergeState acc (l:|[]) (r:|[]) [] _) (Choose L)
     = ActResult (st : history) (Left $ reverse (r : l : acc))
 processAct
     history
-    st@(MergeState acc (l:|ls) (r:|rs) rest (DisplayState dsCnt))
+    st@(MergeState acc (l:|ls) (r:|rs) rest ds)
     (Choose L)
     = ActResult
         (st : history)
@@ -112,13 +114,13 @@ processAct
             ls
             (r : rs)
             rest
-            (DisplayState (succ dsCnt)))
+            (succCnt ds))
 -- Break up runs of sorted subsections during initial pass. This "wastes"
 -- one compare by using it to break up the run rather than create a real
 -- merge.
 processAct
     history
-    st@(MergeState acc (l:|[]) (r:|[]) rest (DisplayState dsCnt))
+    st@(MergeState acc (l:|[]) (r:|[]) rest ds)
     (Choose R)
     = ActResult
         (st : history)
@@ -127,7 +129,7 @@ processAct
             []
             []
             ((r :| []) : rest)
-            (DisplayState (succ dsCnt)))
+            (succCnt ds))
 
 processAct history st@(MergeState acc (l:|ls) (r:|rs) rest dsp) (Choose R)
     = ActResult
@@ -135,7 +137,7 @@ processAct history st@(MergeState acc (l:|ls) (r:|rs) rest dsp) (Choose R)
         (findNextMerge (r : acc) (l : ls) rs rest (succCnt dsp))
 
 succCnt :: DisplayState -> DisplayState
-succCnt (DisplayState c) = DisplayState (succ c)
+succCnt (DisplayState c s) = DisplayState (succ c) s
 
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
@@ -170,8 +172,10 @@ usort :: Monad m
     -> m [a]
 usort getAct xs =
     fix f
-        (ActResult [] (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0)))
+        (ActResult [] (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est)))
     where
+    est = round (num * log num)
+    num :: Double = fromIntegral (length xs)
     f _ (ActResult _ (Left final)) = pure final
     f nxt (ActResult h (Right state))
         = getAct state >>= (nxt . processAct h state)

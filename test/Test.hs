@@ -20,9 +20,9 @@ import SplitItems
 
 -- | Shrinks to the notable number 666
 instance Arbitrary DisplayState where
-    arbitrary = DisplayState <$> arbitrary
-    shrink (DisplayState 666) = []
-    shrink (DisplayState d) = DisplayState 666 : map DisplayState (shrink d)
+    arbitrary = DisplayState <$> arbitrary <*> arbitrary
+    shrink (DisplayState 666 999) = []
+    shrink ds@(DisplayState _ _) = DisplayState 666 999 : genericShrink ds
 
 -- | Size parameter is taken to mean "order of the number of elements left to be
 -- sorted"
@@ -34,13 +34,17 @@ instance Arbitrary a => Arbitrary (MergeState a) where
             <*> arbitrary
             <*> scale (round . sqrt . fromIntegral) arbitrary
             -- ^ sqrt(n) lists of size (sqrt n)
-            <*> (DisplayState <$> sized (\n -> choose (0,n)))
+            <*> do n <- getSize
+                   ct <- choose (0,n)
+                   let ct' = fromIntegral ct
+                   let est = round (ct' * log ct')
+                   pure (DisplayState ct est)
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
         shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _) = []
         shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _)
-            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0)]
+            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0)]
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
 --
@@ -96,7 +100,7 @@ tests = testGroup
     "tests"
     [ testGroup
         "findNextMerge"
-        (let nullDsp = DisplayState 0
+        (let nullDsp = DisplayState 0 0
              -- Need type sig to use type application below
              findNextMerge'
                 :: [a]
@@ -158,7 +162,7 @@ tests = testGroup
                     []
                     []
                     (NE.group (T.words "e f g a b c"))
-                    (DisplayState 0)
+                    (DisplayState 0 11)
             (result -> Right step1) =
                 processAct [] initState (Choose L) -- e < f
             (result -> Right step2) =
@@ -177,7 +181,7 @@ tests = testGroup
                                    ("e" :| [])
                                    ("f" :| [])
                                    (NE.group (T.words "g a b c"))
-                                   (DisplayState 0)
+                                   (DisplayState 0 11)
                       )
                       initState
                   assertEqual
@@ -186,7 +190,7 @@ tests = testGroup
                                    ("f" :| [])
                                    ("g" :| [])
                                    (NE.group (T.words "a b c"))
-                                   (DisplayState 1)
+                                   (DisplayState 1 11)
                       )
                       step1
                   assertEqual
@@ -195,7 +199,7 @@ tests = testGroup
                                    ("g" :| [])
                                    ("a" :| [])
                                    (NE.group (T.words "b c"))
-                                   (DisplayState 2)
+                                   (DisplayState 2 11)
                       )
                       step2
                   assertEqual
@@ -205,7 +209,7 @@ tests = testGroup
                           ("a" :| [])
                           ("b" :| [])
                           ["c" :| [], NE.fromList (T.words "e f g")]
-                          (DisplayState 3)
+                          (DisplayState 3 11)
                       )
                       step3
                   assertEqual
@@ -214,7 +218,7 @@ tests = testGroup
                                    ("b" :| [])
                                    ("c" :| [])
                                    [NE.fromList (T.words "e f g")]
-                                   (DisplayState 4)
+                                   (DisplayState 4 11)
                       )
                       step4
                   assertEqual
@@ -223,7 +227,7 @@ tests = testGroup
                                    (NE.fromList (T.words "e f g"))
                                    (NE.fromList (T.words "a b c"))
                                    []
-                                   (DisplayState 5)
+                                   (DisplayState 5 11)
                       )
                       step5
     , testGroup
