@@ -42,8 +42,11 @@ data MergeState a = MergeState
     deriving (Eq, Show, Generic)
 
 -- | Holds the new history and the next merge state.
-newtype ActResult a
-    = ActResult { unResult :: ([MergeState a], Either [a] (MergeState a)) }
+data ActResult a
+    = ActResult
+    { newHistory :: [MergeState a]
+    , result :: Either [a] (MergeState a)
+    }
     deriving (Eq, Show)
 
 -- | Process given action given a history and current state.
@@ -54,35 +57,35 @@ processAct
     -> ActResult a
 
 processAct history st@(MergeState acc (_:|ls) (r:|rs) rest) (Delete L)
-    = ActResult (st : history, findNextMerge acc ls (r:rs) rest)
+    = ActResult (st : history) (findNextMerge acc ls (r:rs) rest)
 processAct history st@(MergeState acc (l:|ls) (_:|rs) rest) (Delete R)
-    = ActResult (st : history, findNextMerge acc (l:ls) rs rest)
+    = ActResult (st : history) (findNextMerge acc (l:ls) rs rest)
 
 processAct history st@(MergeState acc (_:|ls) (r:|rs) rest) (Edit L new)
-    = ActResult (st : history, Right $ MergeState acc (new:|ls) (r:|rs) rest)
+    = ActResult (st : history) (Right $ MergeState acc (new:|ls) (r:|rs) rest)
 processAct history st@(MergeState acc (l:|ls) (_:|rs) rest) (Edit R new)
-    = ActResult (st : history, Right $ MergeState acc (l:|ls) (new:|rs) rest)
+    = ActResult (st : history) (Right $ MergeState acc (l:|ls) (new:|rs) rest)
 
-processAct [] state Undo = ActResult ([], Right state)
-processAct (s:ss) _ Undo = ActResult (ss, Right s)
+processAct [] state Undo = ActResult [] (Right state)
+processAct (s:ss) _ Undo = ActResult ss (Right s)
 
 -- Assume mostly sorted input during initial pass. It has all one-item NonEmpty
 -- lists, which is how we distinguish it from other cases.
 processAct history st@(MergeState acc (l:|[]) (r:|[]) ((q:|[]):qss)) (Choose L)
     = ActResult
-        (st : history, Right $ MergeState (l : acc) (r :| []) (q :| []) qss)
+        (st : history) (Right $ MergeState (l : acc) (r :| []) (q :| []) qss)
 -- Special case: at the end of the input of a totally sorted list!
 processAct history st@(MergeState acc (l:|[]) (r:|[]) []) (Choose L)
-    = ActResult (st : history, Left $ reverse (r : l : acc))
+    = ActResult (st : history) (Left $ reverse (r : l : acc))
 processAct history st@(MergeState acc (l:|ls) (r:|rs) rest) (Choose L)
-    = ActResult (st : history, findNextMerge (l : acc) ls (r : rs) rest)
+    = ActResult (st : history) (findNextMerge (l : acc) ls (r : rs) rest)
 -- Break up runs of sorted subsections during initial pass. This "wastes"
 -- one compare by using it to break up the run rather than create a real
 -- merge.
 processAct history st@(MergeState acc (l:|[]) (r:|[]) rest) (Choose R)
-    = ActResult (st : history, findNextMerge (l : acc) [] [] ((r :| []) : rest))
+    = ActResult (st : history) (findNextMerge (l : acc) [] [] ((r :| []) : rest))
 processAct history st@(MergeState acc (l:|ls) (r:|rs) rest) (Choose R)
-    = ActResult (st : history, findNextMerge (r : acc) (l : ls) rs rest)
+    = ActResult (st : history) (findNextMerge (r : acc) (l : ls) rs rest)
 
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
@@ -115,10 +118,10 @@ usort :: Monad m
     -> [a] -- ^ Input list
     -> m [a]
 usort getAct xs =
-    fix f (ActResult ([], findNextMerge [] [] [] (map (:|[]) xs)))
+    fix f (ActResult [] (findNextMerge [] [] [] (map (:|[]) xs)))
     where
-    f _ (ActResult (_, Left final)) = pure final
-    f nxt (ActResult (h, Right state))
+    f _ (ActResult _ (Left final)) = pure final
+    f nxt (ActResult h (Right state))
         = getAct state >>= (nxt . processAct h state)
 
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)

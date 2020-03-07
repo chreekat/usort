@@ -140,15 +140,15 @@ tests = testGroup
         $ let
               Right initState =
                   findNextMerge [] [] [] (NE.group (T.words "e f g a b c"))
-              (snd . unResult -> Right step1) =
+              (result -> Right step1) =
                   processAct [] initState (Choose L) -- e < f
-              (snd . unResult -> Right step2) =
+              (result -> Right step2) =
                   processAct [] step1 (Choose L) -- f < g
-              (snd . unResult -> Right step3) =
+              (result -> Right step3) =
                   processAct [] step2 (Choose R) -- g > a
-              (snd . unResult -> Right step4) =
+              (result -> Right step4) =
                   processAct [] step3 (Choose L) -- a < b
-              (snd . unResult -> Right step5) =
+              (result -> Right step5) =
                   processAct [] step4 (Choose L) -- b < c
           in
               do
@@ -206,16 +206,16 @@ tests = testGroup
 
 propUndo :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Bool
 propUndo h (TwoActions st) (NotUndo act) =
-    let ActResult (newHist, (Right newState)) = processAct h st act
-        ActResult (h', Right st') = processAct newHist newState Undo
+    let ActResult newHist (Right newState) = processAct h st act
+        ActResult h' (Right st') = processAct newHist newState Undo
     in h == h' && st == st'
 
 propEditL, propEditR :: [MergeState Int] -> MergeState Int -> Int -> Property
 propEditL h st@(MergeState _ (_:|ys) _ _) x =
-    let ActResult (h', Right st') = processAct h st (Edit L x)
+    let ActResult h' (Right st') = processAct h st (Edit L x)
     in property $ h' == (st:h) && st { left = x:|ys } == st'
 propEditR h st@(MergeState _ _ (_:|ys) _) x =
-    let ActResult (h', Right st') = processAct h st (Edit R x)
+    let ActResult h' (Right st') = processAct h st (Edit R x)
     in property $ h' == (st:h) && st { right = x:|ys } == st'
 
 -- Ok i'm tired. Could use more tests of processAct, though.
