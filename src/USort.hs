@@ -16,7 +16,6 @@ module USort where
 import Control.Monad.Fix
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Text (Text)
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
@@ -36,15 +35,15 @@ data DisplayState = DisplayState
 
 -- | In the midst of a merge, this is the state to act upon.
 data MergeState a = MergeState
-    { acc :: [a]
+    { _acc :: [a]
     -- ^ accumulator for current merge
-    , left :: NonEmpty a
+    , _left :: NonEmpty a
     -- ^ left workspace
-    , right :: NonEmpty a
+    , _right :: NonEmpty a
     -- ^ right workspace
-    , rest :: [NonEmpty a]
+    , _rest :: [NonEmpty a]
     -- ^ lists left to process
-    , display :: DisplayState
+    , _display :: DisplayState
     }
     deriving (Eq, Show, Generic)
 
@@ -72,14 +71,14 @@ processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp) (Delete R)
         (st : history)
         (findNextMerge acc (l:ls) rs rest dsp)
 
-processAct history st@(MergeState acc (_:|ls) _ _ _) (Edit L new)
+processAct history st@(MergeState _ (_:|ls) _ _ _) (Edit L new)
     = ActResult
         (st : history)
-        (Right (st { left = (new :| ls) }))
-processAct history st@(MergeState acc _ (_:|rs) _ _) (Edit R new)
+        (Right st { _left = new :| ls })
+processAct history st@(MergeState _ _ (_:|rs) _ _) (Edit R new)
     = ActResult
         (st : history)
-        (Right (st { right = (new :| rs) }))
+        (Right st { _right = new :| rs })
 
 processAct [] state Undo = ActResult [] (Right state)
 processAct (s:ss) _ Undo = ActResult ss (Right s)

@@ -1,9 +1,8 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -Wno-type-defaults #-}
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
@@ -12,9 +11,7 @@ import Test.Tasty.Golden
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
-import Data.List (sort, zipWith4)
-import Data.Text (Text)
-import GHC.Generics
+import Data.List (sort)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -25,7 +22,7 @@ import SplitItems
 instance Arbitrary DisplayState where
     arbitrary = DisplayState <$> arbitrary
     shrink (DisplayState 666) = []
-    shrink (DisplayState d) = (DisplayState 666 : map DisplayState (shrink d))
+    shrink (DisplayState d) = DisplayState 666 : map DisplayState (shrink d)
 
 -- | Size parameter is taken to mean "order of the number of elements left to be
 -- sorted"
@@ -55,9 +52,9 @@ newtype TwoActions a = TwoActions (MergeState a)
 
 instance Arbitrary a => Arbitrary (TwoActions a) where
     arbitrary
-        = fmap TwoActions (arbitrary `suchThat` (not . null . rest))
+        = fmap TwoActions (arbitrary `suchThat` (not . null . _rest))
     shrink (TwoActions ms)
-        = map TwoActions (filter (not . null . rest) (shrink ms))
+        = map TwoActions (filter (not . null . _rest) (shrink ms))
 
 -- | An action that is not Undo.
 newtype NotUndo a = NotUndo (Action a)
@@ -118,7 +115,7 @@ tests = testGroup
         , testCase "lastR" $ findNextMerge' [42] [] [47] [] @?= Left [42, 47]
         , testProperty "ready" $ \a r ->
             findNextMerge' @Int a [42] [47] r
-                == (Right $ MergeState a (42 :| []) (47 :| []) r nullDsp)
+                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
             findNextMerge' @Int a [42] [] [r]
                 == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp)
@@ -143,13 +140,12 @@ tests = testGroup
               "golden"
               "test/golden/splitme.golden"
               "test/golden/splitme.out"
-              (   (T.writeFile "test/golden/splitme.out")
-              =<< (   ( T.concat
+              (   T.writeFile "test/golden/splitme.out"
+              =<< (   T.concat
                       . map (\x -> T.unlines ["ITEM", x])
                       . items
                       . splitItems
                       . T.lines
-                      )
                   <$> T.readFile "test/golden/splitme.txt"
                   )
               )
@@ -180,7 +176,7 @@ tests = testGroup
                       ( MergeState []
                                    ("e" :| [])
                                    ("f" :| [])
-                                   (NE.group (T.words ("g a b c")))
+                                   (NE.group (T.words "g a b c"))
                                    (DisplayState 0)
                       )
                       initState
@@ -189,7 +185,7 @@ tests = testGroup
                       ( MergeState ["e"]
                                    ("f" :| [])
                                    ("g" :| [])
-                                   (NE.group (T.words ("a b c")))
+                                   (NE.group (T.words "a b c"))
                                    (DisplayState 1)
                       )
                       step1
@@ -198,7 +194,7 @@ tests = testGroup
                       ( MergeState ["f", "e"]
                                    ("g" :| [])
                                    ("a" :| [])
-                                   (NE.group (T.words ("b c")))
+                                   (NE.group (T.words "b c"))
                                    (DisplayState 2)
                       )
                       step2
@@ -244,8 +240,8 @@ propCountChoose h (TwoActions st) (NotUndo act) =
         isChoice (Choose _) = True
         isChoice _ = False
     in classify (isChoice act) "Choose" $ case act of
-        Choose _ -> display newState === succCnt (display st)
-        _ -> display newState === display st
+        Choose _ -> _display newState === succCnt (_display st)
+        _ -> _display newState === _display st
 propUndo :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
 propUndo h (TwoActions st) (NotUndo act) =
     let ActResult newHist (Right newState) = processAct h st act
@@ -255,9 +251,9 @@ propUndo h (TwoActions st) (NotUndo act) =
 propEditL, propEditR :: [MergeState Int] -> MergeState Int -> Int -> Property
 propEditL h st@(MergeState _ (_:|ys) _ _ _) x =
     let ActResult h' (Right st') = processAct h st (Edit L x)
-    in property $ h' == (st:h) && st { left = x:|ys } == st'
+    in property $ h' == (st:h) && st { _left = x:|ys } == st'
 propEditR h st@(MergeState _ _ (_:|ys) _ _) x =
     let ActResult h' (Right st') = processAct h st (Edit R x)
-    in property $ h' == (st:h) && st { right = x:|ys } == st'
+    in property $ h' == (st:h) && st { _right = x:|ys } == st'
 
 -- Ok i'm tired. Could use more tests of processAct, though.

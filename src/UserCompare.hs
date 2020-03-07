@@ -2,7 +2,6 @@
 module UserCompare (userCompare) where
 
 import USort
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.List.NonEmpty (NonEmpty(..))
 import Formatting
@@ -81,8 +80,8 @@ printPrompt (remaining, estimate, x, y) = do
     [xSummary, ySummary] = map shorten [x, y]
     shorten s = T.append summ ellipsis
       where
-        (summ, rem) = T.breakOn "\n" s
+        (summ, remm) = T.breakOn "\n" s
         ellipsis
-            | T.null rem = ""
+            | T.null remm = ""
             | otherwise = "…"
     hdrFmt = "##### (~" % int % "/" % int % ")    Which is more important?    ############"

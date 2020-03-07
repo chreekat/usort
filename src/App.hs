@@ -11,7 +11,6 @@ import Data.Text.IO
 import qualified Data.Text as T
 
 import USort
-import UserCompare
 import SplitItems
 
 main :: (MergeState Text -> IO (Action Text)) -> IO ()
