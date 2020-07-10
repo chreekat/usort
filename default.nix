@@ -1,3 +1,8 @@
-{ nixpkgs ? import <nixpkgs> {} }:
-let h = nixpkgs.haskell.lib;
-in (nixpkgs.haskellPackages.callPackage ./package.nix { })
+{ sources ? import ./nix/sources.nix
+, pkgs ? import sources.nixpkgs {}
+}:
+let
+  h = pkgs.haskell.lib;
+  gitignoreSrc =
+    (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
+in (pkgs.haskellPackages.callCabal2nix "usort" (gitignoreSrc ./.) {})
