@@ -20,7 +20,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
--- import Debug.Pretty.Simple
+import Debug.Pretty.Simple
 
 -- | Decisions, decisions.
 data Choice = L | R
@@ -87,7 +87,18 @@ processAct history st@(MergeState _ _ (_:|rs) _ _) (Edit R new)
 processAct [] state Undo = ActResult [] (Right state)
 processAct (s:ss) _ Undo = ActResult ss (Right s)
 
--- Choose L  -> prepend to the (reversed) accumulator
+-- Override: mostly sorted input on first pass
+processAct
+    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp) (Choose L)
+    = ActResult
+        (st : history)
+        (findNextMerge (l : acc) [r] [f] fs (succCnt dsp))
+-- Break on out-of-order elems.
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp) (Choose R)
+    = ActResult
+        (st : history)
+        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp))
+
 processAct history st@(MergeState acc (l:|ls) rs rest dsp) (Choose L)
     = ActResult
         (st : history)
@@ -126,22 +137,42 @@ findNextMerge w x y z d = fix f w x y z
     -- finalize last merge
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
--- | Sorts the input, given an action that produces 'Action's!
-usort
-    -- :: (Monad m, Show a)
+-- | Under the hood, generic usort impl that lets me add tracing to the state.
+usort'
     :: Monad m
-    => (MergeState a -> m (Action a)) -- ^ Produces an Action
+    -- :: Monad m
+    => (MergeState a -> MergeState a)
+    -> (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]
-usort getAct xs =
+usort' fn getAct xs =
     fix f
-        (ActResult [] (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est)))
+        (ActResult
+            []
+            (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est)))
     where
     est = round (num * log num)
     num :: Double = fromIntegral (length xs)
     f _ (ActResult _ (Left final)) = pure final
     f nxt (ActResult h (Right state))
-        = getAct ( state) >>= (nxt . processAct h state)
+        = getAct (fn state) >>= (nxt . processAct h state)
+        -- = getAct state >>= (nxt . processAct h state)
+
+-- | Sorts the input, given an action that produces 'Action's!
+usort
+    :: Monad m
+    => (MergeState a -> m (Action a)) -- ^ Produces an Action
+    -> [a] -- ^ Input list
+    -> m [a]
+usort = usort' id
+
+-- | Debug-enabled usort
+dsort
+    :: (Monad m, Show a)
+    => (MergeState a -> m (Action a)) -- ^ Produces an Action
+    -> [a] -- ^ Input list
+    -> m [a]
+dsort = usort' pTraceShowId
 
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
 realCompare (MergeState _ (l:|_) (r:|_) _ _)

@@ -154,84 +154,89 @@ tests = testGroup
                   )
               )
         ]
-    {-
-    , testCase "mostly sorted input"
-        $ let
+    , testCase "mostly sorted input" $
+        let
             Right initState =
-                findNextMerge
+                findNextMerge @ Int
                     []
                     []
                     []
-                    (NE.group (T.words "e f g a b c"))
+                    (NE.group [5,6,7,1,2,3])
                     (DisplayState 0 11)
             (result -> Right step1) =
-                processAct [] initState (Choose L) -- e < f
+                processAct [] initState (Choose L) -- 5 < 6
             (result -> Right step2) =
-                processAct [] step1 (Choose L) -- f < g
+                processAct [] step1 (Choose L) -- 6 < 7
             (result -> Right step3) =
-                processAct [] step2 (Choose R) -- g > a
+                processAct [] step2 (Choose R) -- 7 > 1
             (result -> Right step4) =
-                processAct [] step3 (Choose L) -- a < b
+                processAct [] step3 (Choose L) -- 1 < 2
             (result -> Right step5) =
-                processAct [] step4 (Choose L) -- b < c
-          in
-              do
-                  assertEqual
-                      "initState"
-                      ( MergeState []
-                                   ("e" :| [])
-                                   ("f" :| [])
-                                   (NE.group (T.words "g a b c"))
-                                   (DisplayState 0 11)
-                      )
-                      initState
-                  assertEqual
-                      "step1"
-                      ( MergeState ["e"]
-                                   ("f" :| [])
-                                   ("g" :| [])
-                                   (NE.group (T.words "a b c"))
-                                   (DisplayState 1 11)
-                      )
-                      step1
-                  assertEqual
-                      "step2"
-                      ( MergeState ["f", "e"]
-                                   ("g" :| [])
-                                   ("a" :| [])
-                                   (NE.group (T.words "b c"))
-                                   (DisplayState 2 11)
-                      )
-                      step2
-                  assertEqual
-                      "step3"
-                      ( MergeState
-                          []
-                          ("a" :| [])
-                          ("b" :| [])
-                          ["c" :| [], NE.fromList (T.words "e f g")]
-                          (DisplayState 3 11)
-                      )
-                      step3
-                  assertEqual
-                      "step4"
-                      ( MergeState ["a"]
-                                   ("b" :| [])
-                                   ("c" :| [])
-                                   [NE.fromList (T.words "e f g")]
-                                   (DisplayState 4 11)
-                      )
-                      step4
-                  assertEqual
-                      "step5"
-                      ( MergeState []
-                                   (NE.fromList (T.words "e f g"))
-                                   (NE.fromList (T.words "a b c"))
-                                   []
-                                   (DisplayState 5 11)
-                      )
-                      step5
-    -}
+                processAct [] step4 (Choose L) -- 2 < 3
+        in do
+            assertEqual
+                "initState"
+                (MergeState
+                    []
+                    (5:|[])
+                    (6:|[])
+                    (NE.group [7,1,2,3])
+                    (DisplayState 0 11)
+                )
+                initState
+            assertEqual
+                "step1"
+                (MergeState
+                    [5]
+                    (6:|[])
+                    (7:|[])
+                    (NE.group [1,2,3])
+                    (DisplayState 1 11)
+                )
+                step1
+            assertEqual
+                "step2"
+                (MergeState
+                    [6, 5]
+                    (7:|[])
+                    (1:|[])
+                    (NE.group [2,3])
+                    (DisplayState 2 11)
+                )
+                step2
+            assertEqual
+                "step3"
+                (MergeState
+                    []
+                    (1:|[])
+                    (2:|[])
+                    [ (3:|[])
+                    , (5:|[6,7])
+                    ]
+                    (DisplayState 3 11)
+                )
+                step3
+            assertEqual
+                "step4"
+                (MergeState
+                    [1]
+                    (2:|[])
+                    (3:|[])
+                    [ (5:|[6,7])
+                    ]
+                    (DisplayState 4 11)
+                )
+                step4
+            assertEqual
+                "step5"
+                (MergeState
+                    []
+                    (5:|[6,7])
+                    (1:|[2,3])
+                    []
+                    (DisplayState 5 11)
+                )
+                step5
     , testGroup
         "counts comparisons correctly"
         [ testProperty "only counts Choose" propCountChoose
