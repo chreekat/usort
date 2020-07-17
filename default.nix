@@ -17,7 +17,6 @@ in {
             usort
         ];
         buildInputs = [
-            hp.ghcide
         ];
     };
 }
