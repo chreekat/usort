@@ -5,4 +5,4 @@ let
   h = pkgs.haskell.lib;
   gitignoreSrc =
     (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
-in (pkgs.haskellPackages.callCabal2nix "usort" (gitignoreSrc ./.) {})
+in (pkgs.haskellPackages.callCabal2nix "usort" (gitignoreSrc (pkgs.lib.cleanSource ./usort)) {})
