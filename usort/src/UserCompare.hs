@@ -75,7 +75,8 @@ printPrompt (remaining, estimate, x, y) = do
         ]
     T.putStr "-> "
   where
-    [xSummary, ySummary] = map shorten [x, y]
+    xSummary = shorten x
+    ySummary = shorten y
     shorten s = T.append summ ellipsis
       where
         (summ, remm) = T.breakOn "\n" s

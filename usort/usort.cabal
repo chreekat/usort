@@ -29,8 +29,10 @@ library
     , formatting >=6.2.2
     , haskeline >=0.7.2.1
     , text >=1.2.2.0
+    , pretty-simple ^>= 2.2.0.0
   if flag(pedantic)
-    ghc-options: -Wall -Werror
+    ghc-options: -Werror -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
+
   exposed-modules:
       App
       USort

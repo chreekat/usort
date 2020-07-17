@@ -9,7 +9,8 @@ let
     usort =
         hp.callCabal2nix
             "usort"
-            (gitignoreSrc (pkgs.lib.cleanSource ./usort)) {};
+            (gitignoreSrc (pkgs.lib.cleanSource ./usort))
+            {};
 in {
     inherit usort;
     shell = hp.shellFor {

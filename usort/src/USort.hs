@@ -20,6 +20,8 @@ import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 
+-- import Debug.Pretty.Simple
+
 -- | Decisions, decisions.
 data Choice = L | R
     deriving (Eq, Show)
@@ -85,63 +87,15 @@ processAct history st@(MergeState _ _ (_:|rs) _ _) (Edit R new)
 processAct [] state Undo = ActResult [] (Right state)
 processAct (s:ss) _ Undo = ActResult ss (Right s)
 
--- Assume mostly sorted input during initial pass. It has all one-item NonEmpty
--- lists, which is how we distinguish it from other cases.
-processAct
-    history
-    st@(MergeState acc (l:|[]) (r:|[]) ((q:|[]):qss) ds)
-    (Choose L)
+-- Choose L  -> prepend to the (reversed) accumulator
+processAct history st@(MergeState acc (l:|ls) rs rest dsp) (Choose L)
     = ActResult
         (st : history)
-        (Right
-            (MergeState
-                (l : acc)
-                (r :| [])
-                (q :| [])
-                qss
-                (succCnt ds)))
--- Special case: at the end of the input of a totally sorted list!
-processAct history st@(MergeState acc (l:|[]) (r:|[]) [] _) (Choose L)
-    = ActResult (st : history) (Left $ reverse (r : l : acc))
-processAct
-    history
-    st@(MergeState acc (l:|ls) (r:|rs) rest ds)
-    (Choose L)
+        (findNextMerge (l : acc) ls (toList rs) rest (succCnt dsp))
+processAct history st@(MergeState acc ls (r:|rs) rest dsp) (Choose R)
     = ActResult
         (st : history)
-        (findNextMerge
-            (l : acc)
-            ls
-            (r : rs)
-            rest
-            (succCnt ds))
-
--- Break up runs of sorted subsections during initial pass. This "wastes"
--- one compare by using it to break up the run rather than create a real
--- merge. Can we do better? Yes, by enriching the items with identifiers, and
--- tracking already-compared items. This would make deleting and adding items
--- kind of a pain, but not horrific. In the meanwhile, the pain of re-comparing
--- things already compared is too great to keep, so this is getting commented
--- away for now. But wait, no it isn't! I have too many overlapping patterns,
--- and commenting this one case out causes the program to have wrong behavior.
--- Another day, then.
-processAct
-    history
-    st@(MergeState acc (l:|[]) (r:|[]) rest ds)
-    (Choose R)
-    = ActResult
-        (st : history)
-        (findNextMerge
-            (l : acc)
-            []
-            []
-            ((r :| []) : rest)
-            (succCnt ds))
-
-processAct history st@(MergeState acc (l:|ls) (r:|rs) rest dsp) (Choose R)
-    = ActResult
-        (st : history)
-        (findNextMerge (r : acc) (l : ls) rs rest (succCnt dsp))
+        (findNextMerge (r : acc) (toList ls) rs rest (succCnt dsp))
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
@@ -149,7 +103,7 @@ succCnt (DisplayState c s) = DisplayState (succ c) s
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
 findNextMerge
-    :: [a] -- ^ accumulator for current merge
+    :: [a] -- ^ accumulator for current merge (reverse order)
     -> [a] -- ^ left merge workspace
     -> [a] -- ^ right merge workspace
     -> [NonEmpty a] -- ^ lists that have yet to be merged
@@ -173,7 +127,9 @@ findNextMerge w x y z d = fix f w x y z
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
 -- | Sorts the input, given an action that produces 'Action's!
-usort :: Monad m
+usort
+    -- :: (Monad m, Show a)
+    :: Monad m
     => (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]
@@ -185,7 +141,7 @@ usort getAct xs =
     num :: Double = fromIntegral (length xs)
     f _ (ActResult _ (Left final)) = pure final
     f nxt (ActResult h (Right state))
-        = getAct state >>= (nxt . processAct h state)
+        = getAct ( state) >>= (nxt . processAct h state)
 
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
 realCompare (MergeState _ (l:|_) (r:|_) _ _)
