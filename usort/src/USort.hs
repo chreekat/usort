@@ -106,7 +106,8 @@ data ActResult a
 
 -- | Process given action given a history and current state.
 processAct
-    :: [MergeState a] -- ^ history
+    :: Ord a
+    => [MergeState a] -- ^ history
     -> MergeState a -- ^ current
     -> Action a -- ^ to be processed
     -> ActResult a
@@ -139,11 +140,11 @@ processAct
         (st : history)
         (findNextMerge (l : acc) [r] [f] fs (succCnt dsp) cmp)
 -- Break on out-of-order elems.
-processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R)
-    -- let newCmp = Map.singleton l r
-    = ActResult
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R) =
+    let newCmp = stoRCmp l r cmp
+    in ActResult
         (st : history)
-        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) cmp)
+        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp)
 
 processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp) (Choose L)
     = ActResult
@@ -186,7 +187,7 @@ findNextMerge w x y z d cmp = fix f w x y z
 
 -- | Under the hood, generic usort impl that lets me add tracing to the state.
 usort'
-    :: Monad m
+    :: (Ord a, Monad m)
     -- :: Monad m
     => (MergeState a -> MergeState a)
     -> (MergeState a -> m (Action a)) -- ^ Produces an Action
@@ -207,7 +208,7 @@ usort' fn getAct xs =
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort
-    :: Monad m
+    :: (Ord a, Monad m)
     => (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]
@@ -215,7 +216,7 @@ usort = usort' id
 
 -- | Debug-enabled usort
 dsort
-    :: (Monad m, Show a)
+    :: (Monad m, Ord a, Show a)
     => (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]

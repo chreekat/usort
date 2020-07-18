@@ -260,7 +260,7 @@ tests = testGroup
                     , (5:|[6,7])
                     ]
                     (DisplayState 3 11)
-                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
+                    (PreCmp (Map.singleton 1 (Set.singleton 7)))
                 )
                 step3
             assertEqual
@@ -272,7 +272,7 @@ tests = testGroup
                     [ (5:|[6,7])
                     ]
                     (DisplayState 4 11)
-                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
+                    (PreCmp (Map.singleton 1 (Set.singleton 7)))
                 )
                 step4
             assertEqual
@@ -283,7 +283,7 @@ tests = testGroup
                     (1:|[2,3])
                     []
                     (DisplayState 5 11)
-                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
+                    (PreCmp (Map.singleton 1 (Set.singleton 7)))
                 )
                 step5
     , testGroup
