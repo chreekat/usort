@@ -8,11 +8,13 @@ import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
 import Test.Tasty.Golden
 
+import Data.Bifunctor
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
 import Data.List (sort)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -25,13 +27,30 @@ instance Arbitrary DisplayState where
     shrink (DisplayState 666 999) = []
     shrink ds@(DisplayState _ _) = DisplayState 666 999 : genericShrink ds
 
-instance Arbitrary (PreCmp a) where
-    arbitrary = pure noPreCmp
-    shrink x = []
+-- Note that 'arbitrary' isn't very useful since we don't know the context. This
+-- suggests that this type is bunk? See Arbitrary (MergeState a) for a truly
+-- useful arbitrary PreCmp.
+--
+-- This instance exists for its shrink, so that genericShrink works on
+-- MergeState a.
+instance (Arbitrary a, Ord a) => Arbitrary (PreCmp a) where
+    arbitrary = PreCmp <$> arbitrary
+    shrink x = shrinkToNoCmp x <> genShrink x
+        where
+            shrinkToNoCmp (PreCmp x) | Map.null x = []
+            shrinkToNoCmp _ = [noCmp]
+            genShrink (PreCmp x) =
+                let qs = map (second Set.toList) (Map.toList x)
+                    shrinkQs =  genericShrink qs -- [[(a,[a])]]
+                    shrinkXs =
+                        map (Map.fromList . (map (second Set.fromList)))
+                            shrinkQs
+                in map PreCmp shrinkXs
+
 
 -- | Size parameter is taken to mean "order of the number of elements left to be
 -- sorted"
-instance Arbitrary a => Arbitrary (MergeState a) where
+instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
     arbitrary = do
         acc <- scale (round . (/ 3) . fromIntegral) arbitrary
         left <- scale (round . (/ 3) . fromIntegral) arbitrary
@@ -44,13 +63,30 @@ instance Arbitrary a => Arbitrary (MergeState a) where
             let ct' = fromIntegral ct
             let est = round (ct' * log ct')
             pure (DisplayState ct est)
-        pure $ MergeState acc left right rest dsp noPreCmp 
+        preCmp <- do
+            -- Actually, this is not straightforward. I could just generate a
+            -- random one, but how do I generate a *valid* one? We can't have a
+            -- precmp for the first elems of l and r; otherwise we wouldn't be
+            -- here. I guess it's otherwise ok to have any precmp. Even though
+            -- we can generate a precmp for two elems in an already-sorted list
+            -- that is contradictory, it shouldn't cause drama, because
+            -- already-sorted lists don't have their items re-compared.
+
+            let elems = acc <> NE.tail left <> NE.tail right
+            if length elems < 2 then pure noCmp else do
+                -- [(a,b)] suchThat  a, b \elem elems
+                cmps <- scale (`div` 10) $ listOf $ do
+                    l <- elements elems
+                    r <- elements elems `suchThat` (/= l)
+                    pure (l, r)
+                pure (foldr (uncurry stoRCmp) noCmp cmps)
+        pure $ MergeState acc left right rest dsp preCmp
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
         shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _ _) = []
         shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _ _)
-            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0) noPreCmp]
+            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0) noCmp]
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
 --
@@ -60,7 +96,7 @@ instance Arbitrary a => Arbitrary (MergeState a) where
 newtype TwoActions a = TwoActions (MergeState a)
     deriving (Eq, Show)
 
-instance Arbitrary a => Arbitrary (TwoActions a) where
+instance (Arbitrary a, Ord a, Eq a) => Arbitrary (TwoActions a) where
     arbitrary
         = fmap TwoActions (arbitrary `suchThat` (not . null . _rest))
     shrink (TwoActions ms)
@@ -114,7 +150,7 @@ tests = testGroup
                 -> [a]
                 -> [NonEmpty a]
                 -> Either [a] (MergeState a)
-             findNextMerge' a b c d = findNextMerge a b c d nullDsp noPreCmp
+             findNextMerge' a b c d = findNextMerge a b c d nullDsp noCmp
         in
         [ testCase "empty" $ findNextMerge' @() [] [] [] [] @?= Left []
         , testCase "single" $ findNextMerge' [] [] [] [42 :| []] @?= Left [42]
@@ -125,13 +161,13 @@ tests = testGroup
         , testCase "lastR" $ findNextMerge' [42] [] [47] [] @?= Left [42, 47]
         , testProperty "ready" $ \a r ->
             findNextMerge' @Int a [42] [47] r
-                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noPreCmp)
+                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noCmp)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
             findNextMerge' @Int a [42] [] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noPreCmp)
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
         , testProperty "lastMergeR" $ \(NonEmpty a) r ->
             findNextMerge' @Int a [] [42] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noPreCmp)
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
         ])
     , testGroup
         "processAct"
@@ -169,7 +205,7 @@ tests = testGroup
                     []
                     (NE.group [5,6,7,1,2,3])
                     (DisplayState 0 11)
-                    noPreCmp
+                    noCmp
             (result -> Right step1) =
                 processAct [] initState (Choose L) -- 5 < 6
             (result -> Right step2) =
@@ -189,7 +225,7 @@ tests = testGroup
                     (6:|[])
                     (NE.group [7,1,2,3])
                     (DisplayState 0 11)
-                    noPreCmp
+                    noCmp
                 )
                 initState
             assertEqual
@@ -200,7 +236,7 @@ tests = testGroup
                     (7:|[])
                     (NE.group [1,2,3])
                     (DisplayState 1 11)
-                    noPreCmp
+                    noCmp
                 )
                 step1
             assertEqual
@@ -211,7 +247,7 @@ tests = testGroup
                     (1:|[])
                     (NE.group [2,3])
                     (DisplayState 2 11)
-                    noPreCmp
+                    noCmp
                 )
                 step2
             assertEqual
@@ -224,7 +260,7 @@ tests = testGroup
                     , (5:|[6,7])
                     ]
                     (DisplayState 3 11)
-                    noPreCmp
+                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
                 )
                 step3
             assertEqual
@@ -236,7 +272,7 @@ tests = testGroup
                     [ (5:|[6,7])
                     ]
                     (DisplayState 4 11)
-                    noPreCmp
+                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
                 )
                 step4
             assertEqual
@@ -247,7 +283,7 @@ tests = testGroup
                     (1:|[2,3])
                     []
                     (DisplayState 5 11)
-                    noPreCmp
+                    (PreCmp (Map.singleton 7 (Set.singleton 1)))
                 )
                 step5
     , testGroup
@@ -256,7 +292,17 @@ tests = testGroup
           -- * could be cool to statistically check count ~ n lg n
           -- * if we account for delete, some tests should check it makes sense
         ]
+    , testGroup
+        "PreCmp and friends"
+        [ testProperty "PreCmp preserves choice" propPreserveChoice
+        ]
     ]
+
+propPreserveChoice :: Int -> Int -> PreCmp Int -> Property
+propPreserveChoice l r m =
+    let m' = stoRCmp l r m
+        c = reCmp l r m'
+    in l /= r ==> c === Just R
 
 propCountChoose :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
 propCountChoose h (TwoActions st) (NotUndo act) =

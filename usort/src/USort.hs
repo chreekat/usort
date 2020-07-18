@@ -15,12 +15,16 @@
 module USort where
 
 import Control.Monad.Fix
+import Control.Applicative
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Maybe
 import Data.Map (Map)
+import Data.Set (Set)
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Debug.Pretty.Simple
 
@@ -57,11 +61,33 @@ data MergeState a = MergeState
     }
     deriving (Eq, Show, Generic)
 
-newtype PreCmp a = PreCmp (Map a (Map a Choice))
+-- If a value is in the set, then the key beats the value.
+newtype PreCmp a = PreCmp (Map a (Set a))
     deriving (Eq, Show, Generic)
 
-noPreCmp :: PreCmp a
-noPreCmp = PreCmp (Map.empty)
+noCmp :: PreCmp a
+noCmp = PreCmp (Map.empty)
+
+stoRCmp :: Ord a => a -> a -> PreCmp a -> PreCmp a
+stoRCmp l r (PreCmp m) =
+    let m' = Map.singleton r (Set.singleton l)
+    in PreCmp (Map.unionWith Set.union m m')
+
+-- (Re) compare two elements, using the pre-compare map.
+reCmp :: Ord a => a -> a -> PreCmp a -> Maybe Choice
+reCmp l r (PreCmp m) =
+    -- l beats r if l points to a set and r is in it.
+    --
+    -- r beats l if r points to a set and l is in it.
+    --
+    -- It should never be the case that both these things are true. We could
+    -- make a smart constructor if we so desired...
+    --
+    -- Anyway,
+    let a `beats` b = fromMaybe False (fmap (Set.member b) (Map.lookup a m))
+        chooseL = if l `beats` r then Just L else Nothing
+        chooseR = if r `beats` l then Just R else Nothing
+    in chooseL <|> chooseR
 
 -- | Holds the new history and the next merge state.
 data ActResult a
@@ -107,6 +133,7 @@ processAct
         (findNextMerge (l : acc) [r] [f] fs (succCnt dsp) cmp)
 -- Break on out-of-order elems.
 processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R)
+    -- let newCmp = Map.singleton l r
     = ActResult
         (st : history)
         (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) cmp)
