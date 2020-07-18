@@ -12,6 +12,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
 import Data.List (sort)
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -24,27 +25,32 @@ instance Arbitrary DisplayState where
     shrink (DisplayState 666 999) = []
     shrink ds@(DisplayState _ _) = DisplayState 666 999 : genericShrink ds
 
+instance Arbitrary (PreCmp a) where
+    arbitrary = pure noPreCmp
+    shrink x = []
+
 -- | Size parameter is taken to mean "order of the number of elements left to be
 -- sorted"
 instance Arbitrary a => Arbitrary (MergeState a) where
-    arbitrary
-        = MergeState
-            <$> scale (round . sqrt . fromIntegral) arbitrary
-            <*> scale (round . sqrt . fromIntegral) arbitrary
-            <*> scale (round . sqrt . fromIntegral) arbitrary
-            <*> scale (round . sqrt . fromIntegral) arbitrary
+    arbitrary = do
+        acc <- scale (round . (/ 3) . fromIntegral) arbitrary
+        left <- scale (round . (/ 3) . fromIntegral) arbitrary
+        right <- scale (round . (/ 3) . fromIntegral) arbitrary
+        rest <- scale (round . sqrt . fromIntegral) arbitrary
             -- ^ sqrt(n) lists of size (sqrt n)
-            <*> do n <- getSize
-                   ct <- choose (0,n)
-                   let ct' = fromIntegral ct
-                   let est = round (ct' * log ct')
-                   pure (DisplayState ct est)
+        dsp <- do
+            n <- getSize
+            ct <- choose (0,n)
+            let ct' = fromIntegral ct
+            let est = round (ct' * log ct')
+            pure (DisplayState ct est)
+        pure $ MergeState acc left right rest dsp noPreCmp 
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
-        shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _) = []
-        shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _)
-            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0)]
+        shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _ _) = []
+        shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _ _)
+            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0) noPreCmp]
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
 --
@@ -108,7 +114,7 @@ tests = testGroup
                 -> [a]
                 -> [NonEmpty a]
                 -> Either [a] (MergeState a)
-             findNextMerge' a b c d = findNextMerge a b c d nullDsp
+             findNextMerge' a b c d = findNextMerge a b c d nullDsp noPreCmp
         in
         [ testCase "empty" $ findNextMerge' @() [] [] [] [] @?= Left []
         , testCase "single" $ findNextMerge' [] [] [] [42 :| []] @?= Left [42]
@@ -119,13 +125,13 @@ tests = testGroup
         , testCase "lastR" $ findNextMerge' [42] [] [47] [] @?= Left [42, 47]
         , testProperty "ready" $ \a r ->
             findNextMerge' @Int a [42] [47] r
-                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp)
+                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noPreCmp)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
             findNextMerge' @Int a [42] [] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp)
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noPreCmp)
         , testProperty "lastMergeR" $ \(NonEmpty a) r ->
             findNextMerge' @Int a [] [42] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp)
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noPreCmp)
         ])
     , testGroup
         "processAct"
@@ -163,6 +169,7 @@ tests = testGroup
                     []
                     (NE.group [5,6,7,1,2,3])
                     (DisplayState 0 11)
+                    noPreCmp
             (result -> Right step1) =
                 processAct [] initState (Choose L) -- 5 < 6
             (result -> Right step2) =
@@ -182,6 +189,7 @@ tests = testGroup
                     (6:|[])
                     (NE.group [7,1,2,3])
                     (DisplayState 0 11)
+                    noPreCmp
                 )
                 initState
             assertEqual
@@ -192,6 +200,7 @@ tests = testGroup
                     (7:|[])
                     (NE.group [1,2,3])
                     (DisplayState 1 11)
+                    noPreCmp
                 )
                 step1
             assertEqual
@@ -202,6 +211,7 @@ tests = testGroup
                     (1:|[])
                     (NE.group [2,3])
                     (DisplayState 2 11)
+                    noPreCmp
                 )
                 step2
             assertEqual
@@ -214,6 +224,7 @@ tests = testGroup
                     , (5:|[6,7])
                     ]
                     (DisplayState 3 11)
+                    noPreCmp
                 )
                 step3
             assertEqual
@@ -225,6 +236,7 @@ tests = testGroup
                     [ (5:|[6,7])
                     ]
                     (DisplayState 4 11)
+                    noPreCmp
                 )
                 step4
             assertEqual
@@ -235,6 +247,7 @@ tests = testGroup
                     (1:|[2,3])
                     []
                     (DisplayState 5 11)
+                    noPreCmp
                 )
                 step5
     , testGroup
@@ -260,10 +273,10 @@ propUndo h (TwoActions st) (NotUndo act) =
     in (h, st) === (h', st')
 
 propEditL, propEditR :: [MergeState Int] -> MergeState Int -> Int -> Property
-propEditL h st@(MergeState _ (_:|ys) _ _ _) x =
+propEditL h st@(MergeState _ (_:|ys) _ _ _ _) x =
     let ActResult h' (Right st') = processAct h st (Edit L x)
     in property $ h' == (st:h) && st { _left = x:|ys } == st'
-propEditR h st@(MergeState _ _ (_:|ys) _ _) x =
+propEditR h st@(MergeState _ _ (_:|ys) _ _ _) x =
     let ActResult h' (Right st') = processAct h st (Edit R x)
     in property $ h' == (st:h) && st { _right = x:|ys } == st'
 

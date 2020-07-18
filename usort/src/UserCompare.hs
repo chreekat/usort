@@ -10,7 +10,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 userCompare :: MergeState Text -> IO (Action Text)
-userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt est)) = do
+userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt est) _) = do
     printPrompt (dspCnt, est, l, r)
     c <- getResponse
     case c of

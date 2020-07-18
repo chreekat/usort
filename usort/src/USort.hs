@@ -17,8 +17,10 @@ module USort where
 import Control.Monad.Fix
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Map (Map)
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
+import qualified Data.Map as Map
 
 import Debug.Pretty.Simple
 
@@ -48,8 +50,18 @@ data MergeState a = MergeState
     , _rest :: [NonEmpty a]
     -- ^ lists left to process
     , _display :: DisplayState
+    , _preCmps :: PreCmp a
+    -- ^ Record previous comparisons
+    --
+    -- We need this when optimizing for mostly-sorted lists.
     }
     deriving (Eq, Show, Generic)
+
+newtype PreCmp a = PreCmp (Map a (Map a Choice))
+    deriving (Eq, Show, Generic)
+
+noPreCmp :: PreCmp a
+noPreCmp = PreCmp (Map.empty)
 
 -- | Holds the new history and the next merge state.
 data ActResult a
@@ -66,20 +78,20 @@ processAct
     -> Action a -- ^ to be processed
     -> ActResult a
 
-processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp) (Delete L)
+processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp) (Delete L)
     = ActResult
         (st : history)
-        (findNextMerge acc ls (r:rs) rest dsp)
-processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp) (Delete R)
+        (findNextMerge acc ls (r:rs) rest dsp cmp)
+processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp) (Delete R)
     = ActResult
         (st : history)
-        (findNextMerge acc (l:ls) rs rest dsp)
+        (findNextMerge acc (l:ls) rs rest dsp cmp)
 
-processAct history st@(MergeState _ (_:|ls) _ _ _) (Edit L new)
+processAct history st@(MergeState _ (_:|ls) _ _ _ _) (Edit L new)
     = ActResult
         (st : history)
         (Right st { _left = new :| ls })
-processAct history st@(MergeState _ _ (_:|rs) _ _) (Edit R new)
+processAct history st@(MergeState _ _ (_:|rs) _ _ _) (Edit R new)
     = ActResult
         (st : history)
         (Right st { _right = new :| rs })
@@ -89,24 +101,24 @@ processAct (s:ss) _ Undo = ActResult ss (Right s)
 
 -- Override: mostly sorted input on first pass
 processAct
-    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp) (Choose L)
+    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp cmp) (Choose L)
     = ActResult
         (st : history)
-        (findNextMerge (l : acc) [r] [f] fs (succCnt dsp))
+        (findNextMerge (l : acc) [r] [f] fs (succCnt dsp) cmp)
 -- Break on out-of-order elems.
-processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp) (Choose R)
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R)
     = ActResult
         (st : history)
-        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp))
+        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) cmp)
 
-processAct history st@(MergeState acc (l:|ls) rs rest dsp) (Choose L)
+processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp) (Choose L)
     = ActResult
         (st : history)
-        (findNextMerge (l : acc) ls (toList rs) rest (succCnt dsp))
-processAct history st@(MergeState acc ls (r:|rs) rest dsp) (Choose R)
+        (findNextMerge (l : acc) ls (toList rs) rest (succCnt dsp) cmp)
+processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp) (Choose R)
     = ActResult
         (st : history)
-        (findNextMerge (r : acc) (toList ls) rs rest (succCnt dsp))
+        (findNextMerge (r : acc) (toList ls) rs rest (succCnt dsp) cmp)
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
@@ -119,13 +131,14 @@ findNextMerge
     -> [a] -- ^ right merge workspace
     -> [NonEmpty a] -- ^ lists that have yet to be merged
     -> DisplayState -- ^ the new displayState to use
+    -> PreCmp a
     -> Either [a] (MergeState a)
-findNextMerge w x y z d = fix f w x y z
+findNextMerge w x y z d cmp = fix f w x y z
     where
     -- start populating workspace
     f nxt [] [] [] (q:rest) = nxt [] (toList q) [] rest
     -- finish populating workspace
-    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d)
+    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d cmp)
     -- the final merge
     f _ acc [] [] [] = Left (reverse acc)
     -- clean out remaining in left
@@ -133,7 +146,7 @@ findNextMerge w x y z d = fix f w x y z
     -- clean out remaining in right
     f nxt acc [] r@(_:_) rest = nxt (reverse r ++ acc) [] [] rest
     -- lo, an actual merge
-    f _ acc (l:ls) (r:rs) rest = Right (MergeState acc (l:|ls) (r:|rs) rest d)
+    f _ acc (l:ls) (r:rs) rest = Right (MergeState acc (l:|ls) (r:|rs) rest d cmp)
     -- finalize last merge
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
@@ -149,7 +162,7 @@ usort' fn getAct xs =
     fix f
         (ActResult
             []
-            (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est)))
+            (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est) (PreCmp Map.empty)))
     where
     est = round (num * log num)
     num :: Double = fromIntegral (length xs)
@@ -175,5 +188,5 @@ dsort
 dsort = usort' pTraceShowId
 
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
-realCompare (MergeState _ (l:|_) (r:|_) _ _)
+realCompare (MergeState _ (l:|_) (r:|_) _ _ _)
     = pure $ Choose $ if l <= r then L else R
