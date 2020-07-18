@@ -302,7 +302,11 @@ propPreserveChoice :: Int -> Int -> PreCmp Int -> Property
 propPreserveChoice l r m =
     let m' = stoRCmp l r m
         c = reCmp l r m'
-    in l /= r ==> c === Just R
+    in
+        l /= r ==>
+        reCmp l r m /= Just L ==>
+        -- ^ Make sure the opposite wasn't in the arbitrary input
+        c === Just R
 
 propCountChoose :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
 propCountChoose h (TwoActions st) (NotUndo act) =

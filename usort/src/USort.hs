@@ -68,10 +68,17 @@ newtype PreCmp a = PreCmp (Map a (Set a))
 noCmp :: PreCmp a
 noCmp = PreCmp (Map.empty)
 
+-- Assume 'Choose R', so that the second element beats the first.
+--
+-- If the reverse truth is already in the system, return the original list. We
+-- don't do error checking because this should only happen when creating
+-- Arbitrary PreCmps. (Famous last words.)
 stoRCmp :: Ord a => a -> a -> PreCmp a -> PreCmp a
-stoRCmp l r (PreCmp m) =
-    let m' = Map.singleton r (Set.singleton l)
-    in PreCmp (Map.unionWith Set.union m m')
+stoRCmp l r p@(PreCmp m)
+    | reCmp l r p == Just L = p
+    | otherwise =
+        let m' = Map.singleton r (Set.singleton l)
+        in PreCmp (Map.unionWith Set.union m m')
 
 -- (Re) compare two elements, using the pre-compare map.
 reCmp :: Ord a => a -> a -> PreCmp a -> Maybe Choice
