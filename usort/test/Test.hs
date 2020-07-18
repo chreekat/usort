@@ -185,9 +185,18 @@ tests = testGroup
     , testGroup
         "sort"
         [ testProperty "realCompare"
-              $ \(Sorted (xs :: [Int])) -> let xs' = nub xs in Identity (sort @Int xs') == usort realCompare xs'
+              -- In the "real" world, we don't have duplicates. The current
+              -- PreCmp implementation relies on this fact. That's kinda lame,
+              -- but oh well.
+            $ \(Sorted (xs :: [Int])) ->
+                let xs' = nub xs
+                in Identity (sort @Int xs') == usort realCompare xs'
+        -- Before PreCmp, a reverse-ordered list would loop infinitely. Nice to
+        -- check that now. :)
         , testProperty "reverse ordered list"
-              $ \(Sorted (xs :: [Int])) -> let xs' = nub (reverse xs) in Identity (sort @Int xs') == usort realCompare xs'
+            $ \(Sorted (xs :: [Int])) ->
+                let xs' = nub (reverse xs)
+                in Identity (sort @Int xs') == usort realCompare xs'
         ]
     , testGroup
         "splitting items"
