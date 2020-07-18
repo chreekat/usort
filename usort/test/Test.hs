@@ -73,7 +73,11 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
             -- that is contradictory, it shouldn't cause drama, because
             -- already-sorted lists don't have their items re-compared.
 
-            let elems = acc <> NE.tail left <> NE.tail right
+            let elems
+                    = acc
+                    <> NE.tail left
+                    <> NE.tail right
+                    <> concat (map NE.toList rest)
             if length elems < 2 then pure noCmp else do
                 -- [(a,b)] suchThat  a, b \elem elems
                 cmps <- scale (`div` 10) $ listOf $ do
