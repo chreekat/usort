@@ -161,7 +161,8 @@ succCnt (DisplayState c s) = DisplayState (succ c) s
 -- | Find the next state that needs a merge action, or abort with the final
 -- list.
 findNextMerge
-    :: [a] -- ^ accumulator for current merge (reverse order)
+    :: Ord a
+    => [a] -- ^ accumulator for current merge (reverse order)
     -> [a] -- ^ left merge workspace
     -> [a] -- ^ right merge workspace
     -> [NonEmpty a] -- ^ lists that have yet to be merged
@@ -180,8 +181,13 @@ findNextMerge w x y z d cmp = fix f w x y z
     f nxt acc l@(_:_) [] rest = nxt (reverse l ++ acc) [] [] rest
     -- clean out remaining in right
     f nxt acc [] r@(_:_) rest = nxt (reverse r ++ acc) [] [] rest
-    -- lo, an actual merge
-    f _ acc (l:ls) (r:rs) rest = Right (MergeState acc (l:|ls) (r:|rs) rest d cmp)
+    f nxt acc (l:ls) (r:rs) rest =
+        -- Check for PreCmps
+        case reCmp l r cmp of
+            Just L -> nxt (l : acc) ls (r:rs) rest
+            Just R -> nxt (r : acc) (l:ls) rs rest
+            -- lo, an actual merge
+            Nothing -> Right (MergeState acc (l:|ls) (r:|rs) rest d cmp)
     -- finalize last merge
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
@@ -204,7 +210,6 @@ usort' fn getAct xs =
     f _ (ActResult _ (Left final)) = pure final
     f nxt (ActResult h (Right state))
         = getAct (fn state) >>= (nxt . processAct h state)
-        -- = getAct state >>= (nxt . processAct h state)
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort

@@ -1,5 +1,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-type-defaults #-}
@@ -12,7 +13,7 @@ import Data.Bifunctor
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import Data.Functor.Identity
-import Data.List (sort)
+import Data.List (sort, nub)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
@@ -77,8 +78,9 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
                 -- [(a,b)] suchThat  a, b \elem elems
                 cmps <- scale (`div` 10) $ listOf $ do
                     l <- elements elems
-                    r <- elements elems `suchThat` (/= l)
+                    r <- elements elems
                     pure (l, r)
+                let cmps' = filter (\(l,r) -> l /= r) cmps
                 pure (foldr (uncurry stoRCmp) noCmp cmps)
         pure $ MergeState acc left right rest dsp preCmp
 
@@ -145,7 +147,8 @@ tests = testGroup
         (let nullDsp = DisplayState 0 0
              -- Need type sig to use type application below
              findNextMerge'
-                :: [a]
+                :: Ord a
+                => [a]
                 -> [a]
                 -> [a]
                 -> [NonEmpty a]
@@ -177,8 +180,10 @@ tests = testGroup
         ]
     , testGroup
         "sort"
-        [ testProperty "realSort"
-              $ \xs -> Identity (sort @Int xs) == usort realCompare xs
+        [ testProperty "realCompare"
+              $ \(Sorted (xs :: [Int])) -> let xs' = nub xs in Identity (sort @Int xs') == usort realCompare xs'
+        , testProperty "reverse ordered list"
+              $ \(Sorted (xs :: [Int])) -> let xs' = nub (reverse xs) in Identity (sort @Int xs') == usort realCompare xs'
         ]
     , testGroup
         "splitting items"
