@@ -1,0 +1,5 @@
+nix build:
+  image: nixpkgs/nix:nixos-20.03
+  script: |
+    nix-build
+    nix-shell --run 'echo Shell ok.'
