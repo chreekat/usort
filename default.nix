@@ -11,8 +11,14 @@ let
             "usort"
             (gitignoreSrc (pkgs.lib.cleanSource ./usort))
             {};
+    usort-it-client =
+        pkgs.haskell.packages.ghcjs.callCabal2nix
+            "usort.it"
+            (pkgs.lib.cleanSource ./usort.it)
+            {};
+
 in {
-    inherit usort;
+    inherit usort usort-it-client;
     shell = hp.shellFor {
         packages = _ : [
             usort
