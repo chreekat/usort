@@ -1,4 +1,4 @@
-# Revision history for usort-it
+# Revision history for usort-web
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

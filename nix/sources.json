@@ -11,6 +11,18 @@
         "url": "https://github.com/hercules-ci/gitignore.nix/archive/c4662e662462e7bf3c2a968483478a665d00e717.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
+    "miso": {
+        "branch": "master",
+        "description": ":ramen: A tasty Haskell front-end framework",
+        "homepage": "https://haskell-miso.org",
+        "owner": "dmjio",
+        "repo": "miso",
+        "rev": "ea25964565074e73d4052b56b60b6e101fa08bc5",
+        "sha256": "1yb9yvc0ln4yn1jk2k5kwwa1s32310abawz40yd8cqqkm1z7w6wg",
+        "type": "tarball",
+        "url": "https://github.com/dmjio/miso/archive/ea25964565074e73d4052b56b60b6e101fa08bc5.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "niv": {
         "branch": "master",
         "description": "Easy dependency management for Nix projects",
