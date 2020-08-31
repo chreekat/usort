@@ -27,4 +27,11 @@ in {
         buildInputs = [
         ];
     };
+    client-shell = miso.pkgs.haskell.packages.ghcjs.shellFor {
+        packages = _ : [
+            usort-web-client
+        ];
+        buildInputs = [
+        ];
+    };
 }
