@@ -6,20 +6,22 @@ let
     hp = pkgs.haskellPackages;
     gitignoreSrc =
         (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
-    miso = (import sources.miso {});
+    misoPkgs = (import sources.miso {}).pkgs.haskell.packages.ghcjs;
+in rec {
     usort =
         hp.callCabal2nix
             "usort"
             (gitignoreSrc (pkgs.lib.cleanSource ./usort))
             {};
     usort-web-client =
-        miso.pkgs.haskell.packages.ghcjs.callCabal2nix
+        misoPkgs.callCabal2nix
             "usort-web"
             (pkgs.lib.cleanSource ./usort-web)
             {};
 
-in {
-    inherit usort usort-web-client;
+    ci-shell = pkgs.mkShell {
+      buildInputs = [ pkgs.cachix ];
+    };
     shell = hp.shellFor {
         packages = _ : [
             usort
@@ -27,7 +29,7 @@ in {
         buildInputs = [
         ];
     };
-    client-shell = miso.pkgs.haskell.packages.ghcjs.shellFor {
+    client-shell = misoPkgs.shellFor {
         packages = _ : [
             usort-web-client
         ];
