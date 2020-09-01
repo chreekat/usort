@@ -7,60 +7,90 @@ module Main where
 import Miso
 import Miso.String
 
--- * Model shtuff
+-- * Input app
 
-data TopMode list res = Input | Process list | Result res
-deriving instance (Show list, Show res) => Show (TopMode list res)
-deriving instance (Eq list, Eq res) => Eq (TopMode list res)
+type InputModel = JSString
 
-data Model list res = Model
-    { appMode :: TopMode list res
-    , input :: MisoString
-    }
-
-deriving instance (Show list, Show res) => Show (Model list res)
-deriving instance (Eq list, Eq res) => Eq (Model list res)
-
--- * View shtuff
-
-inputView :: View Action
-inputView =
+-- inputView :: View Action
+inputView m wrap =
     div_ []
-        [ h1_ [] [text "U Sort It"]
-        , textarea_
+        [ textarea_
             [ wrap_ "off", cols_ "80", rows_ "50"
-            , onInput UpdateInput
+            , onInput (wrap . UpdateInput)
             ]
-            [ text "Put yo shit here"]
-        , button_ [ onClick BeginSort ] [text "Click"]
+            [ text (ms m) ]
+        , button_ [ onClick (wrap BeginSort) ] [text "Click"]
         ]
 
-sortingView ::  MisoString -> View Action
-sortingView list =
+data InputAction = UpdateInput JSString | BeginSort
+
+inputUpdate a m wrapModel ejectAct = case a of
+    UpdateInput j -> noEff (wrapModel j)
+    BeginSort -> ejectAct a m
+
+-- * Process app
+
+type ProcessModel = JSString
+
+-- processView :: MisoString -> View Action
+processView stuff wrap =
     div_ []
         [ div_ [] [text "You want me to sort this, yeah?"]
-        , pre_ [] [text list]
+        , ul_ [] (fmap (li_ [] . (:[]) . text) (Miso.String.lines stuff))
+        , button_ [ onClick (wrap Back) ] [text "No"]
         ]
 
-topView m = case appMode m of
-    Input -> inputView
-    Process list -> sortingView list
+data ProcessAction = Back
 
+-- processUpdate :: ProcessAction -> ProcessModel -> Effect a m
+processUpdate a m _wrapModel ejectAct = case a of
+    Back -> ejectAct a m
 
-data Action = Nope | UpdateInput MisoString | BeginSort
+-- * Result app
+
+-- No findings :<
+
+-- * Top level composition
+
+data TopModel = ModeInput InputModel | ModeProcess ProcessModel | ModeResult ResultModel
+    deriving (Eq, Show)
+
+type ResultModel = [JSString]
+
+topView :: TopModel -> View Action
+topView m =
+    div_ []
+        [ h1_ [] [text "U Sort It"]
+        , div_ [] rest
+        ]
+  where
+    rest =
+        case m of
+        ModeInput i -> [inputView i ActInput]
+        ModeProcess i -> [processView i ActProcess]
+
+data Action = Nope | ActInput InputAction | ActProcess ProcessAction
+
+update' :: Action -> TopModel -> Effect Action TopModel
+update' a m = case a of
+    Nope -> noEff m
+    ActInput ia ->
+        let ModeInput im = m
+            wrap BeginSort d = noEff (ModeProcess d)
+            wrap _ _ = error "Unhandled wrapped ActInput action"
+        in inputUpdate ia im ModeInput wrap
+    ActProcess pa ->
+        let ModeProcess pm = m
+            wrap Back d = noEff (ModeInput d)
+        in processUpdate pa pm ModeProcess wrap
 
 main :: IO ()
 main = startApp App {..} where
     initialAction = Nope
-    model = Model Input "" :: Model MisoString ()
+    model = ModeInput ""
     update = update'
     view = topView
     events = defaultEvents
     subs = []
     mountPoint = Nothing
     logLevel = Off
-
-update' a m = case a of
-    Nope -> noEff m
-    UpdateInput s -> noEff m { input = s }
-    BeginSort -> noEff m { appMode = Process (input m) }
