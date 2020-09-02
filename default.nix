@@ -19,21 +19,23 @@ in rec {
             (pkgs.lib.cleanSource ./usort-web)
             {};
 
-    ci-shell = pkgs.mkShell {
-      buildInputs = [ pkgs.cachix ];
-    };
-    shell = hp.shellFor {
-        packages = _ : [
-            usort
-        ];
-        buildInputs = [
-        ];
-    };
-    client-shell = misoPkgs.shellFor {
-        packages = _ : [
-            usort-web-client
-        ];
-        buildInputs = [
-        ];
+    shells = {
+        ci-shell = pkgs.mkShell {
+            buildInputs = [ pkgs.cachix ];
+        };
+        shell = hp.shellFor {
+            packages = _ : [
+                usort
+            ];
+            buildInputs = [
+            ];
+        };
+        client-shell = misoPkgs.shellFor {
+            packages = _ : [
+                usort-web-client
+            ];
+            buildInputs = [
+            ];
+        };
     };
 }

@@ -1,1 +1,1 @@
-(import ../default.nix {}).client-shell
+(import ../default.nix {}).shells.client-shell

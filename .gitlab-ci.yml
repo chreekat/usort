@@ -1,6 +1,6 @@
 nix build:
   image: nixpkgs/nix:nixos-20.03
   script: |
-    nix-shell -A ci-shell --run 'cachix use miso-haskell'
+    nix-shell -A shells.ci-shell --run 'cachix use miso-haskell'
     nix-build --quiet
     nix-shell --run 'echo Shell ok.'
