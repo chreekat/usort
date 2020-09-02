@@ -3,4 +3,5 @@ nix build:
   script: |
     nix-shell -A shells.ci-shell --run 'cachix use miso-haskell'
     nix-build --quiet
-    nix-shell --run 'echo Shell ok.'
+    nix-shell -A shells.shell --run 'echo shell ok.'
+    nix-shell -A shells.client-shell --run 'echo client-shell ok.'
