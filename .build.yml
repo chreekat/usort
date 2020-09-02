@@ -3,5 +3,6 @@ sources:
   - https://git.sr.ht/~chreekat/usort
 tasks:
   - nix-build: |
+      cd usort
       nix-build --quiet
       nix-shell --run 'echo Shell ok.'
