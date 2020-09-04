@@ -2,18 +2,25 @@
 
 ## Synopses
 
-1.
-  ```
-  $ usort list.txt
-  ```
-2.
-  ```
-  $ usort
-  <paste in content>
-  <c-d>
-  ```
+Sort a file's contents:
+
+ ```
+ $ usort list.txt
+ ```
+
+Sort pasted content:
+
+ ```
+ $ usort
+ <paste in content>
+ <c-d>
+ ```
+
+(I wish that worked with pipes, but it does not.)
 
 ## About
+
+[![builds.sr.ht status](https://builds.sr.ht/~chreekat/usort.svg)](https://builds.sr.ht/~chreekat/usort?)
 
 Prioritizing task lists or backlogs is an important part of being organized.
 Even when it isn't strictly required, I find thinking about priorities to be a
