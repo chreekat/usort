@@ -11,5 +11,5 @@ nix build:
 shells check:
   script: |
     for shell in ci-shell shell client-shell; do
-      nix-shell . -A $shell --run "echo Shell $shell ok."
+      nix-shell . -A shells.$shell --run "echo Shell $shell ok."
     done
