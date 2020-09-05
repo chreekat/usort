@@ -1,41 +1,35 @@
 { sources ? import ./nix/sources.nix
-, pkgs ? import sources.nixpkgs {}
+, compiler ? "ghc"
 }:
 let
+    pkgs = import sources.nixpkgs {};
+    miso = import sources.miso {};
     h = pkgs.haskell.lib;
-    hp = pkgs.haskellPackages;
+    ghcPkgs = pkgs.haskellPackages;
+    ghcjsPkgs = miso.pkgs.haskell.packages.ghcjs;
+    eitherPkgs =
+      if compiler == "ghc"
+        then ghcPkgs
+        else ghcjsPkgs;
     gitignoreSrc =
         (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
-    misoPkgs = (import sources.miso {}).pkgs.haskell.packages.ghcjs;
 in rec {
+    # Usort for server
     usort =
-        hp.callCabal2nix
+        eitherPkgs.callCabal2nix
             "usort"
             (gitignoreSrc (pkgs.lib.cleanSource ./usort))
             {};
+    # Usort for web
     usort-web-client =
-        misoPkgs.callCabal2nix
+        ghcjsPkgs.callCabal2nix
             "usort-web"
             (pkgs.lib.cleanSource ./usort-web)
             {};
 
     shells = {
-        ci-shell = pkgs.mkShell {
+        ci = pkgs.mkShell {
             buildInputs = [ pkgs.cachix ];
-        };
-        shell = hp.shellFor {
-            packages = _ : [
-                usort
-            ];
-            buildInputs = [
-            ];
-        };
-        client-shell = misoPkgs.shellFor {
-            packages = _ : [
-                usort-web-client
-            ];
-            buildInputs = [
-            ];
         };
     };
 }

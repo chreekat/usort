@@ -19,7 +19,8 @@ executable client
   -- other-extensions:
   build-depends:
     base ^>=4.12.0.0,
-    miso
+    miso,
+    usort
   hs-source-dirs:
     client,
     shared
