@@ -4,11 +4,5 @@ sources:
 tasks:
   - nix-build: |
       cd usort
-      nix-shell -A shells.ci-shell --run 'cachix use miso-haskell'
+      nix-shell -A shells.ci --run 'cachix use miso-haskell'
       nix-build --quiet
-  - shells-check: |
-      cd usort
-      nix-shell -A shells.ci-shell --run 'cachix use miso-haskell'
-      for shell in ci-shell shell client-shell; do
-        nix-shell . -A shells.$shell --run "echo Shell $shell ok."
-      done

@@ -2,14 +2,8 @@ image: nixpkgs/nix:nixos-20.03
 
 default:
   before_script: |
-    nix-shell -A shells.ci-shell --run 'cachix use miso-haskell'
+    nix-shell -A shells.ci --run 'cachix use miso-haskell'
 
 nix build:
   script: |
     nix-build --quiet
-
-shells check:
-  script: |
-    for shell in ci-shell shell client-shell; do
-      nix-shell . -A shells.$shell --run "echo Shell $shell ok."
-    done
