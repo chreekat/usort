@@ -20,7 +20,7 @@ executable client
   build-depends:
     base ^>=4.12.0.0,
     miso,
-    usort
+    usort-lib
   hs-source-dirs:
     client,
     shared
