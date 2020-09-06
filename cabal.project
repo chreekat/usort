@@ -1,3 +1,4 @@
 packages:
+    usort-console
     usort-lib
     usort-web
