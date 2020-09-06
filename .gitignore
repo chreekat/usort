@@ -4,3 +4,4 @@ dist-newstyle
 errors.err
 result
 result-*
+cabal.project.local
