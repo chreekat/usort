@@ -14,18 +14,22 @@ let
     gitignoreSrc =
         (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
 in rec {
-    # Usort for server
-    usort =
+    usort-lib = 
         eitherPkgs.callCabal2nix
-            "usort"
-            (gitignoreSrc (pkgs.lib.cleanSource ./usort))
+            "usort-lib"
+            (gitignoreSrc (pkgs.lib.cleanSource ./usort-lib))
             {};
-    # Usort for web
-    usort-web-client =
-        ghcjsPkgs.callCabal2nix
-            "usort-web"
-            (pkgs.lib.cleanSource ./usort-web)
-            {};
+    usort-console =
+        ghcPkgs.callCabal2nix
+            "usort-console"
+            (gitignoreSrc (pkgs.lib.cleanSource ./usort-console))
+            { inherit usort-lib; };
+    ## Usort for web
+    #usort-web-client =
+    #    ghcjsPkgs.callCabal2nix
+    #        "usort-web"
+    #        (pkgs.lib.cleanSource ./usort-web)
+    #        {};
 
     shells = {
         ci = pkgs.mkShell {
