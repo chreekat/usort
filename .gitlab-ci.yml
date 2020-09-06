@@ -1,9 +1,9 @@
 image: nixpkgs/nix:nixos-20.03
 
 default:
-  before_script: |
-    nix-shell -A shells.ci --run 'cachix use miso-haskell'
+  before_script:
+    - nix-shell -A shells.ci --run 'cachix use miso-haskell'
 
 nix build:
-  script: |
-    nix-build --quiet
+  script:
+    - nix-build --quiet
