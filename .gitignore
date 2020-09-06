@@ -1,5 +1,6 @@
-usort/test/golden/*.out
+usort-lib/test/golden/*.out
 dist
 dist-newstyle
 errors.err
 result
+result-*
