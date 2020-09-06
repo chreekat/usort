@@ -4,12 +4,16 @@
 
 module Main where
 
+import SplitItems
+
 import Miso
-import Miso.String
+import Miso.String (toMisoString, fromMisoString, ms, MisoString)
+
+import qualified Data.Text as T
 
 -- * Input app
 
-type InputModel = JSString
+type InputModel = MisoString
 
 -- inputView :: View Action
 inputView m wrap =
@@ -22,7 +26,7 @@ inputView m wrap =
         , button_ [ onClick (wrap BeginSort) ] [text "Click"]
         ]
 
-data InputAction = UpdateInput JSString | BeginSort
+data InputAction = UpdateInput MisoString | BeginSort
 
 inputUpdate a m wrapModel ejectAct = case a of
     UpdateInput j -> noEff (wrapModel j)
@@ -30,13 +34,14 @@ inputUpdate a m wrapModel ejectAct = case a of
 
 -- * Process app
 
-type ProcessModel = JSString
+type ProcessModel = MisoString
 
 -- processView :: MisoString -> View Action
 processView stuff wrap =
-    div_ []
+    let is = map toMisoString (items (splitItems (T.lines (fromMisoString stuff))))
+    in div_ []
         [ div_ [] [text "You want me to sort this, yeah?"]
-        , ul_ [] (fmap (li_ [] . (:[]) . text) (Miso.String.lines stuff))
+        , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) (is))
         , button_ [ onClick (wrap Back) ] [text "No"]
         ]
 
@@ -55,7 +60,7 @@ processUpdate a m _wrapModel ejectAct = case a of
 data TopModel = ModeInput InputModel | ModeProcess ProcessModel | ModeResult ResultModel
     deriving (Eq, Show)
 
-type ResultModel = [JSString]
+type ResultModel = [MisoString]
 
 topView :: TopModel -> View Action
 topView m =
