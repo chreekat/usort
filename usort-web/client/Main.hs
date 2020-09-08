@@ -25,7 +25,7 @@ inputView m wrap =
             , onInput (wrap . UpdateInput)
             ]
             [ text (ms m) ]
-        , button_ [ onClick (wrap BeginSort) ] [text "Click"]
+        , button_ [ onClick (wrap BeginSort) ] ["Click"]
         ]
 
 data InputAction = UpdateInput MisoString | BeginSort
@@ -42,10 +42,10 @@ type ProcessModel = MisoString
 processView stuff wrap =
     let is = map toMisoString (items (splitItems (T.lines (fromMisoString stuff))))
     in div_ []
-        [ div_ [] [text "You want me to sort this, yeah?"]
+        [ div_ [] ["You want me to sort this, yeah?"]
         , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) is)
-        , button_ [ onClick (wrap Back) ] [text "No"]
-        , button_ [ onClick (wrap (Sort is)) ] [text "Yes"]
+        , button_ [ onClick (wrap Back) ] ["No"]
+        , button_ [ onClick (wrap (Sort is)) ] ["Yes"]
         ]
 
 data ProcessAction = Back | Sort [MisoString]
@@ -68,16 +68,29 @@ data CmpModel = CmpModel
     { cmpHistory :: [MergeState MisoString]
     , cmpMergeState :: MergeState MisoString
     , cmpEditBuf :: Maybe MisoString
+    -- , modal :: Maybe CmpModal
     } deriving (Eq, Show)
 
 cmpView m wrap =
     let MergeState _ (l :| _)  (r :| _) _ d _ = cmpMergeState m
-    in ul_ []
-        [ li_ [] [text (ms l)]
+    in ul_ [] (
+        [ div_ [] ["Which is more important?"]
+        , li_ [] [text (ms l)]
         , li_ [] [text (ms r)]
         ]
+        <> map (\(a, t) -> button_ [ onClick a ] [t])
+            [ (wrap (Choose L), "Left")
+            , (wrap (Choose R), "Right")
+            ]
+    )
 
-cmpUpdate = undefined
+data CmpAction = Done [MisoString]
+
+processCmp act (CmpModel hist ms x) wrapModel ejectAct =
+    let ActResult newHist res = processAct hist ms act
+    in case res of
+        Left res -> ejectAct (Done res)
+        Right newMs -> noEff (wrapModel (CmpModel newHist newMs x))
 
 -- * Result app
 
@@ -89,7 +102,7 @@ data TopModel
     = ModelInput InputModel
     | ModelProcess ProcessModel
     | ModelCmp CmpModel
-    | ModeResult ResultModel
+    | ModelResult ResultModel
     deriving (Eq, Show)
 
 type ResultModel = [MisoString]
@@ -106,6 +119,7 @@ topView m =
         ModelInput i -> [inputView i ActInput]
         ModelProcess i -> [processView i ActProcess]
         ModelCmp i -> [cmpView i ActCmp]
+        ModelResult m -> [ul_ [] (map (li_ [] . (:[]) . text . ms) m)]
 
 data UIAction
     = Nope
@@ -117,8 +131,11 @@ update' :: UIAction -> TopModel -> Effect UIAction TopModel
 update' a m = case a of
     Nope -> noEff m
     ActInput ia ->
+        -- FIXME: Partial match. need to associate ActInput with ModelInput, etc.
         let ModelInput im = m
             wrap BeginSort d = noEff (ModelProcess d)
+            -- FIXME: Need to distinguish internally-handled actions with
+            -- ejectable actions.
             wrap _ _ = error "Unhandled wrapped ActInput action"
         in inputUpdate ia im ModelInput wrap
     ActProcess pa ->
@@ -126,9 +143,13 @@ update' a m = case a of
             wrap Back d = noEff (ModelInput d)
             wrap (Sort is) _ =
                 case firstCmp is of
-                    Left xs -> undefined
+                    Left xs -> noEff (ModelResult xs)
                     Right ms -> noEff (ModelCmp (CmpModel [] ms Nothing))
         in processUpdate pa pm ModelProcess wrap
+    ActCmp act ->
+        let ModelCmp cm = m
+            wrap (Done xs) = noEff (ModelResult xs)
+        in processCmp act cm ModelCmp wrap
 
 main :: IO ()
 main = startApp App {..} where
