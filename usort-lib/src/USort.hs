@@ -14,12 +14,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module USort where
 
-import Control.Monad.Fix
 import Control.Applicative
+import Control.Monad.Fix
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe
 import Data.Map (Map)
+import Data.Maybe
 import Data.Set (Set)
 import GHC.Generics
 import qualified Data.List.NonEmpty as NE
@@ -66,7 +66,7 @@ newtype PreCmp a = PreCmp (Map a (Set a))
     deriving (Eq, Show, Generic)
 
 noCmp :: PreCmp a
-noCmp = PreCmp (Map.empty)
+noCmp = PreCmp Map.empty
 
 -- Assume 'Choose R', so that the second element beats the first.
 --
@@ -91,7 +91,7 @@ reCmp l r (PreCmp m) =
     -- make a smart constructor if we so desired...
     --
     -- Anyway,
-    let a `beats` b = fromMaybe False (fmap (Set.member b) (Map.lookup a m))
+    let a `beats` b = maybe False (Set.member b) (Map.lookup a m)
         chooseL = if l `beats` r then Just L else Nothing
         chooseR = if r `beats` l then Just R else Nothing
     in chooseL <|> chooseR

@@ -44,7 +44,7 @@ instance (Arbitrary a, Ord a) => Arbitrary (PreCmp a) where
                 let qs = map (second Set.toList) (Map.toList x)
                     shrinkQs =  genericShrink qs -- [[(a,[a])]]
                     shrinkXs =
-                        map (Map.fromList . (map (second Set.fromList)))
+                        map (Map.fromList . second Set.fromList)
                             shrinkQs
                 in map PreCmp shrinkXs
 
@@ -77,14 +77,14 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
                     = acc
                     <> NE.tail left
                     <> NE.tail right
-                    <> concat (map NE.toList rest)
+                    <> concatMap NE.toList rest
             if length elems < 2 then pure noCmp else do
                 -- [(a,b)] suchThat  a, b \elem elems
                 cmps <- scale (`div` 10) $ listOf $ do
                     l <- elements elems
                     r <- elements elems
                     pure (l, r)
-                let cmps' = filter (\(l,r) -> l /= r) cmps
+                let cmps' = filter (uncurry (/=)) cmps
                 pure (foldr (uncurry stoRCmp) noCmp cmps)
         pure $ MergeState acc left right rest dsp preCmp
 
@@ -274,8 +274,8 @@ tests = testGroup
                     []
                     (1:|[])
                     (2:|[])
-                    [ (3:|[])
-                    , (5:|[6,7])
+                    [ 3:|[]
+                    , 5:|[6,7]
                     ]
                     (DisplayState 3 11)
                     (PreCmp (Map.singleton 1 (Set.singleton 7)))
@@ -287,7 +287,7 @@ tests = testGroup
                     [1]
                     (2:|[])
                     (3:|[])
-                    [ (5:|[6,7])
+                    [ 5:|[6,7]
                     ]
                     (DisplayState 4 11)
                     (PreCmp (Map.singleton 1 (Set.singleton 7)))

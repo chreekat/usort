@@ -1,6 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Main where
 
@@ -41,7 +40,7 @@ processView stuff wrap =
     let is = map toMisoString (items (splitItems (T.lines (fromMisoString stuff))))
     in div_ []
         [ div_ [] [text "You want me to sort this, yeah?"]
-        , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) (is))
+        , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) is)
         , button_ [ onClick (wrap Back) ] [text "No"]
         ]
 
