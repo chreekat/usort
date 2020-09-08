@@ -1,14 +1,16 @@
 {-|
- - usort!
- -
- - In order to undo, all previous program states will be pushed to a stack. O(n
- - * (n lg n)) storage, but if n is large enough to matter when *you* are the
- - sort function, you have bigger problems.
- -
- - I'll use an iterative merge sort so all state is easy to get at and think
- - about.
- -
- -}
+usort!
+-}
+
+{-
+In order to undo, all previous program states will be pushed to a stack. O(n
+* (n lg n)) storage, but if n is large enough to matter when *you* are the
+sort function, you have bigger problems.
+
+I'll use an iterative merge sort so all state is easy to get at and think
+about.
+
+-}
 
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -65,6 +67,7 @@ data MergeState a = MergeState
 newtype PreCmp a = PreCmp (Map a (Set a))
     deriving (Eq, Show, Generic)
 
+-- | Empty
 noCmp :: PreCmp a
 noCmp = PreCmp Map.empty
 
@@ -115,11 +118,11 @@ processAct
 processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp) (Delete L)
     = ActResult
         (st : history)
-        (findNextMerge acc ls (r:rs) rest dsp cmp)
+        (findNextCmp acc ls (r:rs) rest dsp cmp)
 processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp) (Delete R)
     = ActResult
         (st : history)
-        (findNextMerge acc (l:ls) rs rest dsp cmp)
+        (findNextCmp acc (l:ls) rs rest dsp cmp)
 
 processAct history st@(MergeState _ (_:|ls) _ _ _ _) (Edit L new)
     = ActResult
@@ -138,29 +141,29 @@ processAct
     history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp cmp) (Choose L)
     = ActResult
         (st : history)
-        (findNextMerge (l : acc) [r] [f] fs (succCnt dsp) cmp)
+        (findNextCmp (l : acc) [r] [f] fs (succCnt dsp) cmp)
 -- Break on out-of-order elems.
 processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R) =
     let newCmp = stoRCmp l r cmp
     in ActResult
         (st : history)
-        (findNextMerge (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp)
+        (findNextCmp (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp)
 
 processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp) (Choose L)
     = ActResult
         (st : history)
-        (findNextMerge (l : acc) ls (toList rs) rest (succCnt dsp) cmp)
+        (findNextCmp (l : acc) ls (toList rs) rest (succCnt dsp) cmp)
 processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp) (Choose R)
     = ActResult
         (st : history)
-        (findNextMerge (r : acc) (toList ls) rs rest (succCnt dsp) cmp)
+        (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) cmp)
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
 
--- | Find the next state that needs a merge action, or abort with the final
+-- | Find the next state that needs a comparison, or abort with the final
 -- list.
-findNextMerge
+findNextCmp
     :: Ord a
     => [a] -- ^ accumulator for current merge (reverse order)
     -> [a] -- ^ left merge workspace
@@ -169,7 +172,7 @@ findNextMerge
     -> DisplayState -- ^ the new displayState to use
     -> PreCmp a
     -> Either [a] (MergeState a)
-findNextMerge w x y z d cmp = fix f w x y z
+findNextCmp w x y z d cmp = fix f w x y z
     where
     -- start populating workspace
     f nxt [] [] [] (q:rest) = nxt [] (toList q) [] rest
@@ -199,17 +202,18 @@ usort'
     -> (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]
-usort' fn getAct xs =
-    fix f
-        (ActResult
-            []
-            (findNextMerge [] [] [] (map (:|[]) xs) (DisplayState 0 est) (PreCmp Map.empty)))
+usort' fn getAct = fix f . ActResult [] . firstCmp
     where
-    est = round (num * log num)
-    num :: Double = fromIntegral (length xs)
     f _ (ActResult _ (Left final)) = pure final
     f nxt (ActResult h (Right state))
         = getAct (fn state) >>= (nxt . processAct h state)
+
+firstCmp :: Ord a => [a] -> Either [a] (MergeState a)
+firstCmp xs = 
+    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 est) (PreCmp Map.empty)
+    where
+    est = round (num * log num)
+    num :: Double = fromIntegral (length xs)
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort
@@ -227,6 +231,7 @@ dsort
     -> m [a]
 dsort = usort' pTraceShowId
 
+-- | Compares with '(<=)'
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
 realCompare (MergeState _ (l:|_) (r:|_) _ _ _)
     = pure $ Choose $ if l <= r then L else R

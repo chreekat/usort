@@ -32,5 +32,9 @@ in rec {
         ci = pkgs.mkShell {
             buildInputs = [ pkgs.cachix ];
         };
+        usort-lib = ghcPkgs.shellFor {
+          packages = p: [ (usort-lib p) ];
+          withHoogle = true;
+        };
     };
 }

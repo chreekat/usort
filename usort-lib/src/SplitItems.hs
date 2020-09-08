@@ -3,7 +3,7 @@
 {- |
 The point herein is to take a heirarchical list, such as
 
-@@
+@
     -  xxxxxxxx xxx xxxxxx xxx xxxx'x xxx xxxx xxxxxx
         -  xxxxx xx xx xxxx xxxx xxxxxx?
     -  Rxxxxxx xx
@@ -28,7 +28,7 @@ The point herein is to take a heirarchical list, such as
     -  Sxxxx xxx AxxxSxxx
     -  Cxxxxx xxxxxxx xxxxxxx (x.x. xxxxxxxxxxx)
     -  xxx xxxxTxxxDxxxxxxx xxx xxx xxxxxxx
-@@
+@
 
 and return a list of top-level items. Whitespace should be removed and re-added
 at the end.
@@ -41,7 +41,9 @@ I would eventually like to be smart about not-exactly-uncommon edge cases, such 
 3. Strip and re-add whitespace in the front.
 
 For now I'll leave these enhancements out.
+-}
 
+{-
 Since Haskell does best with rows and not columns, I think I'll make my life
 easier and reorient the character matrix.
 
