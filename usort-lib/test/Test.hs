@@ -44,7 +44,7 @@ instance (Arbitrary a, Ord a) => Arbitrary (PreCmp a) where
                 let qs = map (second Set.toList) (Map.toList x)
                     shrinkQs =  genericShrink qs -- [[(a,[a])]]
                     shrinkXs =
-                        map (Map.fromList . second Set.fromList)
+                        map (Map.fromList . map (second Set.fromList))
                             shrinkQs
                 in map PreCmp shrinkXs
 
@@ -147,33 +147,33 @@ tests :: TestTree
 tests = testGroup
     "tests"
     [ testGroup
-        "findNextMerge"
+        "findNextCmp"
         (let nullDsp = DisplayState 0 0
              -- Need type sig to use type application below
-             findNextMerge'
+             findNextCmp'
                 :: Ord a
                 => [a]
                 -> [a]
                 -> [a]
                 -> [NonEmpty a]
                 -> Either [a] (MergeState a)
-             findNextMerge' a b c d = findNextMerge a b c d nullDsp noCmp
+             findNextCmp' a b c d = findNextCmp a b c d nullDsp noCmp
         in
-        [ testCase "empty" $ findNextMerge' @() [] [] [] [] @?= Left []
-        , testCase "single" $ findNextMerge' [] [] [] [42 :| []] @?= Left [42]
-        , testCase "weirdA" $ findNextMerge' [42] [] [] [] @?= Left [42]
-        , testCase "weirdL" $ findNextMerge' [] [42] [] [] @?= Left [42]
-        , testCase "weirdR" $ findNextMerge' [] [] [42] [] @?= Left [42]
-        , testCase "lastL" $ findNextMerge' [42] [47] [] [] @?= Left [42, 47]
-        , testCase "lastR" $ findNextMerge' [42] [] [47] [] @?= Left [42, 47]
+        [ testCase "empty" $ findNextCmp' @() [] [] [] [] @?= Left []
+        , testCase "single" $ findNextCmp' [] [] [] [42 :| []] @?= Left [42]
+        , testCase "weirdA" $ findNextCmp' [42] [] [] [] @?= Left [42]
+        , testCase "weirdL" $ findNextCmp' [] [42] [] [] @?= Left [42]
+        , testCase "weirdR" $ findNextCmp' [] [] [42] [] @?= Left [42]
+        , testCase "lastL" $ findNextCmp' [42] [47] [] [] @?= Left [42, 47]
+        , testCase "lastR" $ findNextCmp' [42] [] [47] [] @?= Left [42, 47]
         , testProperty "ready" $ \a r ->
-            findNextMerge' @Int a [42] [47] r
+            findNextCmp' @Int a [42] [47] r
                 == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noCmp)
         , testProperty "lastMergeL" $ \(NonEmpty a) r ->
-            findNextMerge' @Int a [42] [] [r]
+            findNextCmp' @Int a [42] [] [r]
                 == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
         , testProperty "lastMergeR" $ \(NonEmpty a) r ->
-            findNextMerge' @Int a [] [42] [r]
+            findNextCmp' @Int a [] [42] [r]
                 == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
         ])
     , testGroup
@@ -217,7 +217,7 @@ tests = testGroup
     , testCase "mostly sorted input" $
         let
             Right initState =
-                findNextMerge @ Int
+                findNextCmp @ Int
                     []
                     []
                     []
