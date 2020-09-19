@@ -1,5 +1,6 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
@@ -12,6 +13,13 @@ import Miso
 import Miso.String (toMisoString, fromMisoString, ms, MisoString)
 
 import qualified Data.Text as T
+
+-- jsaddle import
+#ifndef __GHCJS__
+import           Language.Javascript.JSaddle.Warp as JSaddle
+import qualified Network.Wai.Handler.Warp         as Warp
+import           Network.WebSockets
+#endif
 
 -- * Input app
 
@@ -151,8 +159,18 @@ update' a m = case a of
             wrap (Done xs) = noEff (ModelResult xs)
         in processCmp act cm ModelCmp wrap
 
+#ifndef __GHCJS__
+runApp :: JSM () -> IO ()
+runApp f =
+  Warp.runSettings (Warp.setPort 8080 (Warp.setTimeout 3600 Warp.defaultSettings)) =<<
+    JSaddle.jsaddleOr defaultConnectionOptions (f >> syncPoint) JSaddle.jsaddleApp
+#else
+runApp :: IO () -> IO ()
+runApp app = app
+#endif
+
 main :: IO ()
-main = startApp App {..} where
+main = runApp $ startApp App {..} where
     initialAction = Nope
     model = ModelInput ""
     update = update'

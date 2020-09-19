@@ -37,6 +37,12 @@ in rec {
 
     inherit (ghcPkgs) usort-lib;
 
+    usort-web-client-dev =
+        ghcPkgs.callCabal2nix
+            "usort-web"
+            (localSrc ./usort-web)
+            { miso = miso.miso-jsaddle; };
+
     shells = {
         ci = pkgs.mkShell {
             buildInputs = [ pkgs.cachix ];

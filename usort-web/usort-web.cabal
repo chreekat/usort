@@ -22,6 +22,9 @@ executable client
     miso,
     text ^>= 1.2,
     usort-lib
+  if !impl(ghcjs)
+    build-depends:
+      jsaddle, jsaddle-warp, transformers, warp, websockets
   hs-source-dirs:
     client,
     shared
