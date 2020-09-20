@@ -37,13 +37,22 @@ in rec {
 
     inherit (ghcPkgs) usort-lib;
 
-    usort-web-client-dev =
-        ghcPkgs.callCabal2nix
-            "usort-web"
-            (localSrc ./usort-web)
-            { miso = miso.miso-jsaddle; };
-
     shells = {
+        jsaddle =
+            let
+              a = ghcPkgs.callCabal2nix
+                "usort-web"
+                (localSrc ./usort-web)
+                { miso = miso.miso-jsaddle; };
+              reload-script = pkgs.writeScriptBin "reload" ''
+                ${ghcPkgs.ghcid}/bin/ghcid -c \
+                  '${ghcPkgs.cabal-install}/bin/cabal new-repl' \
+                  -T ':main'
+              '';
+            in a.env.overrideAttrs (old: {
+              buildInputs = old.buildInputs ++ [reload-script];
+            });
+
         ci = pkgs.mkShell {
             buildInputs = [ pkgs.cachix ];
         };
