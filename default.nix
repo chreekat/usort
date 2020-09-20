@@ -2,13 +2,13 @@
 , compiler ? "ghc"
 }:
 let
-    pkgs = import sources.nixpkgs {};
     miso = import sources.miso {};
+    pkgs = miso.pkgs;
     h = pkgs.haskell.lib;
-    ghcPkgs = pkgs.haskellPackages;
-    ghcjsPkgs = miso.pkgs.haskell.packages.ghcjs;
+    ghcPkgs = pkgs.haskell.packages.ghc865;
+    ghcjsPkgs = pkgs.haskell.packages.ghcjs86;
     gitignoreSrc =
-        (import sources."gitignore.nix" { inherit (pkgs) lib;}).gitignoreSource;
+        (import sources."gitignore.nix" {}).gitignoreSource;
     usort-lib = eitherPkgs:
         eitherPkgs.callCabal2nix
             "usort-lib"
