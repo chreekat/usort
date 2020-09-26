@@ -8,7 +8,7 @@ module Main where
 import Data.List.NonEmpty (NonEmpty (..))
 
 import SplitItems
-import USort
+import qualified USort
 
 import Miso
 import Miso.String (toMisoString, fromMisoString, ms, MisoString)
@@ -25,33 +25,35 @@ import           Network.WebSockets
 data AppView = Input | Confirm | Compare | Done
     deriving (Eq, Show)
 
-data TopModel' a = TopModel
+data Model' a = Model
     { initialInput :: a
     , initialLines :: [a]
     , appView :: AppView
-    , cmpHistory :: [MergeState a]
-    , cmpMergeState :: Maybe (MergeState a)
+    , cmpHistory :: [USort.MergeState a]
+    , cmpMergeState :: Maybe (USort.MergeState a)
     , cmpEditBuf :: Maybe a
     , cmpResult :: [a]
     } deriving (Eq, Show)
 
-type TopModel = TopModel' MisoString
+type Model = Model' MisoString
 
-initModel :: TopModel
-initModel = TopModel "" [] Input [] Nothing Nothing []
+initModel :: Model
+initModel = Model "" [] Input [] Nothing Nothing []
 
-data UIAction' a
+data Action' a
     = Nope
     | UpdateInput MisoString
     | ConfirmInput
     | Back
     | StartCompare
-    | CompareAct (Action a)
+    | Edit USort.Choice
+    | CancelSort
+    | CompareAct (USort.Action a)
     | Finish
 
-type UIAction = UIAction' MisoString
+type Action = Action' MisoString
 
-update' :: UIAction -> TopModel -> Effect UIAction TopModel
+update' :: Action -> Model -> Effect Action Model
 update' a m = case a of
     Nope -> noEff m
     UpdateInput s -> noEff m { initialInput = s }
@@ -69,7 +71,7 @@ update' a m = case a of
         }
     Back -> noEff m { appView = Input }
     StartCompare ->
-        case firstCmp (initialLines m) of
+        case USort.firstCmp (initialLines m) of
             Left xs -> error "noEff (ModelResult xs) >> pure Finish"
             Right ms -> noEff m
                 { appView = Compare
@@ -85,7 +87,7 @@ update' a m = case a of
     CompareAct act ->
         maybe
             (error "Got a CompareAct when no comparison is in progress.")
-            (\(ActResult newHist res) ->
+            (\(USort.ActResult newHist res) ->
                 case res of
                     Left res -> noEff m
                         { cmpHistory = newHist
@@ -96,9 +98,9 @@ update' a m = case a of
                         { cmpHistory = newHist
                         , cmpMergeState = Just newMs
                         })
-            ((processAct (cmpHistory m) `flip` act) <$> cmpMergeState m)
+            ((USort.processAct (cmpHistory m) `flip` act) <$> cmpMergeState m)
 
-topView :: TopModel -> View UIAction
+topView :: Model -> View Action
 topView m =
     div_ []
         [ h1_ [] [text "U Sort It"]
@@ -122,20 +124,27 @@ topView m =
     confirmView =
         div_ []
             [ div_ [] ["You want me to sort this, yeah?"]
-            , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) (initialLines m))
+            , ul_ []
+                (fmap
+                    (li_ [] . (:[]) . pre_ [] . (:[]) . text)
+                    (initialLines m))
             , button_ [ onClick Back ] ["No"]
             , button_ [ onClick StartCompare ] ["Yes"]
             ]
     cmpView =
-        let Just (MergeState _ (l :| _)  (r :| _) _ d _) = cmpMergeState m
+        let Just (USort.MergeState _ (l :| _)  (r :| _) _ d _) = cmpMergeState m
         in ul_ [] (
             [ div_ [] ["Which is more important?"]
             , li_ [] [text (ms l)]
             , li_ [] [text (ms r)]
             ]
             <> map (\(a, t) -> button_ [ onClick a ] [t])
-                [ (CompareAct (Choose L), "Left")
-                , (CompareAct (Choose R), "Right")
+                [ (CompareAct (USort.Choose USort.L), "Left")
+                , (CompareAct (USort.Choose USort.R), "Right")
+                -- , (CompareAct USort.Undo, "Undo")
+                -- , (Edit USort.L, "Edit Left")
+                -- , (Edit USort.R, "Edit Right")
+                -- , (CancelSort, "Cancel sort")
                 ]
         )
 
@@ -143,8 +152,12 @@ topView m =
 #ifndef __GHCJS__
 runApp :: JSM () -> IO ()
 runApp f =
-  Warp.runSettings (Warp.setPort 8080 (Warp.setTimeout 3600 Warp.defaultSettings)) =<<
-    JSaddle.jsaddleOr defaultConnectionOptions (f >> syncPoint) JSaddle.jsaddleApp
+  Warp.runSettings
+    (Warp.setPort 8080 (Warp.setTimeout 3600 Warp.defaultSettings))
+    =<< JSaddle.jsaddleOr
+            defaultConnectionOptions
+            (f >> syncPoint)
+            JSaddle.jsaddleApp
 #else
 runApp :: IO () -> IO ()
 runApp app = app
