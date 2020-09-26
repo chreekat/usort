@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Main where
 
@@ -11,7 +12,6 @@ import USort
 
 import Miso
 import Miso.String (toMisoString, fromMisoString, ms, MisoString)
-
 import qualified Data.Text as T
 
 -- jsaddle import
@@ -21,143 +21,124 @@ import qualified Network.Wai.Handler.Warp         as Warp
 import           Network.WebSockets
 #endif
 
--- * Input app
 
-type InputModel = MisoString
-
--- inputView :: View UIAction
-inputView m wrap =
-    div_ []
-        [ textarea_
-            [ wrap_ "off", cols_ "80", rows_ "50"
-            , onInput (wrap . UpdateInput)
-            ]
-            [ text (ms m) ]
-        , button_ [ onClick (wrap BeginSort) ] ["Click"]
-        ]
-
-data InputAction = UpdateInput MisoString | BeginSort
-
-inputUpdate a m wrapModel ejectAct = case a of
-    UpdateInput j -> noEff (wrapModel j)
-    BeginSort -> ejectAct a m
-
--- * Process app
-
-type ProcessModel = MisoString
-
--- processView :: MisoString -> View UIAction
-processView stuff wrap =
-    let is = map toMisoString (items (splitItems (T.lines (fromMisoString stuff))))
-    in div_ []
-        [ div_ [] ["You want me to sort this, yeah?"]
-        , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) is)
-        , button_ [ onClick (wrap Back) ] ["No"]
-        , button_ [ onClick (wrap (Sort is)) ] ["Yes"]
-        ]
-
-data ProcessAction = Back | Sort [MisoString]
-
--- processUpdate :: ProcessAction -> ProcessModel -> Effect a m
-processUpdate a m _wrapModel ejectAct = case a of
-    Back -> ejectAct a m
-    Sort _ -> ejectAct a m
-
--- * Cmp app
---
--- In usort-console, we build our own UI loop. But on the web, we just hook into
--- the browser's loop. A user choice shows up as an 'Action'; we 'processAct'
--- on it, and use 'ActResult' to update the model. That's, uh, all there is to
--- it. Our model is nearly just the ActResult itself, except that we need to
--- eject up a level in the `Left` case. Oh, we also need some scratch space for
--- "modals" (edits, deletes).
-
-data CmpModel = CmpModel
-    { cmpHistory :: [MergeState MisoString]
-    , cmpMergeState :: MergeState MisoString
-    , cmpEditBuf :: Maybe MisoString
-    -- , modal :: Maybe CmpModal
-    } deriving (Eq, Show)
-
-cmpView m wrap =
-    let MergeState _ (l :| _)  (r :| _) _ d _ = cmpMergeState m
-    in ul_ [] (
-        [ div_ [] ["Which is more important?"]
-        , li_ [] [text (ms l)]
-        , li_ [] [text (ms r)]
-        ]
-        <> map (\(a, t) -> button_ [ onClick a ] [t])
-            [ (wrap (Choose L), "Left")
-            , (wrap (Choose R), "Right")
-            ]
-    )
-
-data CmpAction = Done [MisoString]
-
-processCmp act (CmpModel hist ms x) wrapModel ejectAct =
-    let ActResult newHist res = processAct hist ms act
-    in case res of
-        Left res -> ejectAct (Done res)
-        Right newMs -> noEff (wrapModel (CmpModel newHist newMs x))
-
--- * Result app
-
--- No findings :<
-
--- * Top level composition
-
-data TopModel
-    = ModelInput InputModel
-    | ModelProcess ProcessModel
-    | ModelCmp CmpModel
-    | ModelResult ResultModel
+data AppView = Input | Confirm | Compare | Done
     deriving (Eq, Show)
 
-type ResultModel = [MisoString]
+data TopModel' a = TopModel
+    { initialInput :: a
+    , initialLines :: [a]
+    , appView :: AppView
+    , cmpHistory :: [MergeState a]
+    , cmpMergeState :: Maybe (MergeState a)
+    , cmpEditBuf :: Maybe a
+    , cmpResult :: [a]
+    } deriving (Eq, Show)
+
+type TopModel = TopModel' MisoString
+
+initModel :: TopModel
+initModel = TopModel "" [] Input [] Nothing Nothing []
+
+data UIAction' a
+    = Nope
+    | UpdateInput MisoString
+    | ConfirmInput
+    | Back
+    | StartCompare
+    | CompareAct (Action a)
+    | Finish
+
+type UIAction = UIAction' MisoString
+
+update' :: UIAction -> TopModel -> Effect UIAction TopModel
+update' a m = case a of
+    Nope -> noEff m
+    UpdateInput s -> noEff m { initialInput = s }
+    ConfirmInput -> noEff m
+        { initialLines =
+            let
+                split' = items . splitItems . T.lines
+                thoseLines
+                    = map toMisoString
+                    . split'
+                    . fromMisoString
+                    . initialInput
+            in thoseLines m
+        , appView = Confirm
+        }
+    Back -> noEff m { appView = Input }
+    StartCompare ->
+        case firstCmp (initialLines m) of
+            Left xs -> error "noEff (ModelResult xs) >> pure Finish"
+            Right ms -> noEff m
+                { appView = Compare
+                , cmpMergeState = Just ms
+                }
+
+    -- In usort-console, we build our own UI loop. But on the web, we just hook
+    -- into the browser's loop. A user choice shows up as an 'Action'; we
+    -- 'processAct' on it, and use 'ActResult' to update the model. That's, uh,
+    -- all there is to it. Our model is nearly just the ActResult itself, except
+    -- that we need to eject up a level in the `Left` case. Oh, we also need
+    -- some scratch space for "modals" (edits, deletes).
+    CompareAct act ->
+        maybe
+            (error "Got a CompareAct when no comparison is in progress.")
+            (\(ActResult newHist res) ->
+                case res of
+                    Left res -> noEff m
+                        { cmpHistory = newHist
+                        , cmpResult = res
+                        , appView = Done
+                        }
+                    Right newMs -> noEff m
+                        { cmpHistory = newHist
+                        , cmpMergeState = Just newMs
+                        })
+            ((processAct (cmpHistory m) `flip` act) <$> cmpMergeState m)
 
 topView :: TopModel -> View UIAction
 topView m =
     div_ []
         [ h1_ [] [text "U Sort It"]
-        , div_ [] rest
+        , div_ [] [rest]
         ]
   where
-    rest =
-        case m of
-        ModelInput i -> [inputView i ActInput]
-        ModelProcess i -> [processView i ActProcess]
-        ModelCmp i -> [cmpView i ActCmp]
-        ModelResult m -> [ul_ [] (map (li_ [] . (:[]) . text . ms) m)]
+    rest = case (appView m) of
+        Input -> inputView
+        Confirm -> confirmView
+        Compare -> cmpView
+        Done -> ul_ [] (map (li_ [] . (:[]) . text . ms) (cmpResult m))
+    inputView =
+        div_ []
+            [ textarea_
+                [ wrap_ "off", cols_ "80", rows_ "50"
+                , onInput UpdateInput
+                ]
+                [ text (ms (initialInput m)) ]
+            , button_ [ onClick ConfirmInput ] ["Click"]
+            ]
+    confirmView =
+        div_ []
+            [ div_ [] ["You want me to sort this, yeah?"]
+            , ul_ [] (fmap (li_ [] . (:[]) . pre_ [] . (:[]) . text) (initialLines m))
+            , button_ [ onClick Back ] ["No"]
+            , button_ [ onClick StartCompare ] ["Yes"]
+            ]
+    cmpView =
+        let Just (MergeState _ (l :| _)  (r :| _) _ d _) = cmpMergeState m
+        in ul_ [] (
+            [ div_ [] ["Which is more important?"]
+            , li_ [] [text (ms l)]
+            , li_ [] [text (ms r)]
+            ]
+            <> map (\(a, t) -> button_ [ onClick a ] [t])
+                [ (CompareAct (Choose L), "Left")
+                , (CompareAct (Choose R), "Right")
+                ]
+        )
 
-data UIAction
-    = Nope
-    | ActInput InputAction
-    | ActProcess ProcessAction
-    | ActCmp (Action MisoString)
-
-update' :: UIAction -> TopModel -> Effect UIAction TopModel
-update' a m = case a of
-    Nope -> noEff m
-    ActInput ia ->
-        -- FIXME: Partial match. need to associate ActInput with ModelInput, etc.
-        let ModelInput im = m
-            wrap BeginSort d = noEff (ModelProcess d)
-            -- FIXME: Need to distinguish internally-handled actions with
-            -- ejectable actions.
-            wrap _ _ = error "Unhandled wrapped ActInput action"
-        in inputUpdate ia im ModelInput wrap
-    ActProcess pa ->
-        let ModelProcess pm = m
-            wrap Back d = noEff (ModelInput d)
-            wrap (Sort is) _ =
-                case firstCmp is of
-                    Left xs -> noEff (ModelResult xs)
-                    Right ms -> noEff (ModelCmp (CmpModel [] ms Nothing))
-        in processUpdate pa pm ModelProcess wrap
-    ActCmp act ->
-        let ModelCmp cm = m
-            wrap (Done xs) = noEff (ModelResult xs)
-        in processCmp act cm ModelCmp wrap
 
 #ifndef __GHCJS__
 runApp :: JSM () -> IO ()
@@ -172,7 +153,7 @@ runApp app = app
 main :: IO ()
 main = runApp $ startApp App {..} where
     initialAction = Nope
-    model = ModelInput ""
+    model = initModel
     update = update'
     view = topView
     events = defaultEvents

@@ -47,6 +47,7 @@ in rec {
               reload-script = pkgs.writeScriptBin "reload" ''
                 ${ghcPkgs.ghcid}/bin/ghcid -c \
                   '${ghcPkgs.cabal-install}/bin/cabal new-repl' \
+                  -o errors.err \
                   -T ':main'
               '';
             in a.env.overrideAttrs (old: {
