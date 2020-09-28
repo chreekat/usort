@@ -1,0 +1,15 @@
+diff --git a/src/Language/Javascript/JSaddle/WebSockets.hs b/src/Language/Javascript/JSaddle/WebSockets.hs
+index b1f13c7..ea722a3 100644
+--- a/src/Language/Javascript/JSaddle/WebSockets.hs
++++ b/src/Language/Javascript/JSaddle/WebSockets.hs
+@@ -144,7 +144,9 @@ jsaddleApp = jsaddleAppWithJs $ jsaddleJs False
+ jsaddleAppWithJs :: ByteString -> Application
+ jsaddleAppWithJs js req sendResponse =
+   jsaddleAppWithJsOr js
+-    (\_ _ -> sendResponse $ W.responseLBS H.status403 [("Content-Type", "text/plain")] "Forbidden")
++    (\req' send' -> send' $ case (W.requestMethod req', W.pathInfo req') of
++        ("GET", _) -> indexResponse)
++        -- _          -> W.responseLBS H.status403 [("Content-Type", "text/plain")] "Forbidden")
+     req sendResponse
+ 
+ jsaddleAppWithJsOr :: ByteString -> Application -> Application
