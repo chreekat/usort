@@ -10,6 +10,8 @@ let
 
     localSrc = dir: gitignoreSrc (pkgs.lib.cleanSource dir);
 
+    unmarkBroken = drv: h.overrideCabal drv (drv: { broken = false; });
+
     extensions = self: super: {
       usort-lib =
         self.callCabal2nix
@@ -17,10 +19,17 @@ let
           (localSrc ./usort-lib)
           {};
 
-      jsaddle-warp = super.jsaddle-warp.overrideAttrs (_:  {
-        #src = ../../src/jsaddle/jsaddle-warp;
-        patches = [ ./nix/patches/jsaddle.patch ];
-      });
+      jsaddle-warp =
+        unmarkBroken
+          (h.dontCheck
+            (h.appendPatch
+              super.jsaddle-warp
+              ./nix/patches/jsaddle.patch));
+
+      # overrideAttrs (_:  {
+      #   #src = ../../src/jsaddle/jsaddle-warp;
+      #   patches = [ ./nix/patches/jsaddle.patch ];
+      # });
 
       usort-console =
           self.callCabal2nix
@@ -48,12 +57,12 @@ let
         -r
     '';
 
-    ghcPkgs = pkgs.haskell.packages.ghc865.extend extensions;
-    ghcjsPkgs = pkgs.haskell.packages.ghcjs86.extend extensions;
+    ghcPkgs = pkgs.haskell.packages.ghc865.override { overrides = extensions; };
+    ghcjsPkgs = pkgs.haskell.packages.ghcjs86.override { overrides = extensions; };
 
 in rec {
 
-    inherit (ghcPkgs) usort-lib usort-console;
+    inherit (ghcPkgs) usort-lib usort-console usort-web-jsaddle;
 
     inherit (ghcjsPkgs) usort-web-client;
 
