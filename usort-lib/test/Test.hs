@@ -56,6 +56,7 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
         acc <- scale (round . (/ 3) . fromIntegral) arbitrary
         left <- scale (round . (/ 3) . fromIntegral) arbitrary
         right <- scale (round . (/ 3) . fromIntegral) arbitrary
+        boring <- arbitrary -- ^ Not to be sorted, so size can be arbitrary
         rest <- scale (round . sqrt . fromIntegral) arbitrary
             -- ^ sqrt(n) lists of size (sqrt n)
         dsp <- do
@@ -86,13 +87,13 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
                     pure (l, r)
                 let cmps' = filter (uncurry (/=)) cmps
                 pure (foldr (uncurry stoRCmp) noCmp cmps)
-        pure $ MergeState acc left right rest dsp preCmp
+        pure $ MergeState acc left right rest dsp preCmp boring
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
-        shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _ _) = []
-        shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _ _)
-            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0) noCmp]
+        shrinkToEmpty (MergeState [] (_:|[]) (_:|[]) [] _ _ _) = []
+        shrinkToEmpty (MergeState _ (l:|_) (r:|_) _ _ _ _)
+            = [MergeState [] (l:|[]) (r:|[]) [] (DisplayState 0 0) noCmp []]
 
 -- | A state that has at least two actions remaining, allowing for testing undo.
 --
@@ -156,25 +157,26 @@ tests = testGroup
                 -> [a]
                 -> [a]
                 -> [NonEmpty a]
+                -> [a]
                 -> Either [a] (MergeState a)
-             findNextCmp' a b c d = findNextCmp a b c d nullDsp noCmp
+             findNextCmp' a b c d e = findNextCmp a b c d nullDsp noCmp e
         in
-        [ testCase "empty" $ findNextCmp' @() [] [] [] [] @?= Left []
-        , testCase "single" $ findNextCmp' [] [] [] [42 :| []] @?= Left [42]
-        , testCase "weirdA" $ findNextCmp' [42] [] [] [] @?= Left [42]
-        , testCase "weirdL" $ findNextCmp' [] [42] [] [] @?= Left [42]
-        , testCase "weirdR" $ findNextCmp' [] [] [42] [] @?= Left [42]
-        , testCase "lastL" $ findNextCmp' [42] [47] [] [] @?= Left [42, 47]
-        , testCase "lastR" $ findNextCmp' [42] [] [47] [] @?= Left [42, 47]
-        , testProperty "ready" $ \a r ->
-            findNextCmp' @Int a [42] [47] r
-                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noCmp)
-        , testProperty "lastMergeL" $ \(NonEmpty a) r ->
+        [ testCase "empty" $ findNextCmp' @() [] [] [] [] [] @?= Left []
+        , testCase "single" $ findNextCmp' [] [] [] [42 :| []] [] @?= Left [42]
+        , testCase "weirdA" $ findNextCmp' [42] [] [] [] [] @?= Left [42]
+        , testCase "weirdL" $ findNextCmp' [] [42] [] [] [] @?= Left [42]
+        , testCase "weirdR" $ findNextCmp' [] [] [42] [] [] @?= Left [42]
+        , testCase "lastL" $ findNextCmp' [42] [47] [] [] [] @?= Left [42, 47]
+        , testCase "lastR" $ findNextCmp' [42] [] [47] [] [] @?= Left [42, 47]
+        , testProperty "ready" $ \a r b ->
+            findNextCmp' @Int a [42] [47] r b
+                == Right (MergeState a (42 :| []) (47 :| []) r nullDsp noCmp b)
+        , testProperty "lastMergeL" $ \(NonEmpty a) r b ->
             findNextCmp' @Int a [42] [] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
-        , testProperty "lastMergeR" $ \(NonEmpty a) r ->
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp b)
+        , testProperty "lastMergeR" $ \(NonEmpty a) r b ->
             findNextCmp' @Int a [] [42] [r]
-                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp)
+                == Right (MergeState [] r (NE.reverse (42 :| a)) [] nullDsp noCmp b)
         ])
     , testGroup
         "processAct"
@@ -222,8 +224,9 @@ tests = testGroup
                     []
                     []
                     (NE.group [5,6,7,1,2,3])
-                    (DisplayState 0 11)
+                    (DisplayState 0 0)
                     noCmp
+                    []
             (result -> Right step1) =
                 processAct [] initState (Choose L) -- 5 < 6
             (result -> Right step2) =
@@ -242,8 +245,9 @@ tests = testGroup
                     (5:|[])
                     (6:|[])
                     (NE.group [7,1,2,3])
-                    (DisplayState 0 11)
+                    (DisplayState 0 0)
                     noCmp
+                    []
                 )
                 initState
             assertEqual
@@ -253,8 +257,9 @@ tests = testGroup
                     (6:|[])
                     (7:|[])
                     (NE.group [1,2,3])
-                    (DisplayState 1 11)
+                    (DisplayState 1 0)
                     noCmp
+                    []
                 )
                 step1
             assertEqual
@@ -264,8 +269,9 @@ tests = testGroup
                     (7:|[])
                     (1:|[])
                     (NE.group [2,3])
-                    (DisplayState 2 11)
+                    (DisplayState 2 0)
                     noCmp
+                    []
                 )
                 step2
             assertEqual
@@ -277,8 +283,9 @@ tests = testGroup
                     [ 3:|[]
                     , 5:|[6,7]
                     ]
-                    (DisplayState 3 11)
+                    (DisplayState 3 0)
                     (PreCmp (Map.singleton 1 (Set.singleton 7)))
+                    []
                 )
                 step3
             assertEqual
@@ -289,8 +296,9 @@ tests = testGroup
                     (3:|[])
                     [ 5:|[6,7]
                     ]
-                    (DisplayState 4 11)
+                    (DisplayState 4 0)
                     (PreCmp (Map.singleton 1 (Set.singleton 7)))
+                    []
                 )
                 step4
             assertEqual
@@ -300,8 +308,9 @@ tests = testGroup
                     (5:|[6,7])
                     (1:|[2,3])
                     []
-                    (DisplayState 5 11)
+                    (DisplayState 5 0)
                     (PreCmp (Map.singleton 1 (Set.singleton 7)))
+                    []
                 )
                 step5
     , testGroup
