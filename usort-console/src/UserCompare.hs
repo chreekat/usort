@@ -10,7 +10,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 userCompare :: MergeState Text -> IO (Action Text)
-userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _) = do
+userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _ _) = do
     printPrompt (dspCnt, numElem, l, r)
     c <- getResponse
     case c of
@@ -18,7 +18,7 @@ userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _) = d
         '2' -> pure $ Choose R
         'd' -> Delete <$> delItem
         'e' -> either (Edit L) (Edit R) <$> editItem l r
-        'i' -> either (Boring L) (Boring R) <$> boringItem l r
+        'i' -> Boring <$> boringItem
         'u' -> pure Undo
         _   -> unknownCommand (userCompare m)
 
@@ -48,7 +48,8 @@ editItem x y = do
         '2' -> Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
-boringItem :: Text -> Text -> IO (Either Text Text)
+boringItem :: IO Choice
+boringItem = do
     putStr "Lol, which item is boring? > "
     c <- getResponse
     case c of
@@ -86,7 +87,9 @@ printPrompt (remaining, numElem, x, y) = do
         ]
     T.putStr "-> "
   where
-    estimate = (\x -> x * log x) (fromIntegral numElem)
+    estimate = nlogn (fromIntegral numElem)
+    nlogn :: Double -> Int
+    nlogn n = round $ n * log n
     xSummary = shorten x
     ySummary = shorten y
     shorten s = T.append summ ellipsis

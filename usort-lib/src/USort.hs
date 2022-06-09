@@ -35,7 +35,7 @@ data Choice = L | R
     deriving (Eq, Show)
 
 -- | Merge actions (things a user may do)
-data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo
+data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo | Boring Choice | Nop
     deriving (Eq, Show, Generic)
 
 -- | Data relevant for the UI, but not the merge itself.
@@ -60,6 +60,8 @@ data MergeState a = MergeState
     -- ^ Record previous comparisons
     --
     -- We need this when optimizing for mostly-sorted lists.
+    , _boring :: [a]
+    -- ^ Items we don't sort
     }
     deriving (Eq, Show, Generic)
 
@@ -124,7 +126,7 @@ processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp b) (Delete R)
         (st : history)
         (findNextCmp acc (l:ls) rs rest (predElem dsp) cmp b)
 
-processAct history st@(MergeState _ (_:|ls) _ _ _ _) (Edit L new)
+processAct history st@(MergeState _ (_:|ls) _ _ _ _ _) (Edit L new)
     = ActResult
         (st : history)
         (Right st { _left = new :| ls })
@@ -158,14 +160,16 @@ processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Choose R)
         (st : history)
         (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) cmp b)
 
-processAct history st@(MergeState acc (l:ls) rs rest dsp cmp b) (Boring L)
+processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp b) (Boring L)
     = ActResult
         (st : history)
         (findNextCmp acc ls (toList rs) rest (predElem dsp) cmp (l:b))
-processAct history st@(MergeState acc ls (r:rs) rest (predElem dsp) cmp b) (Boring R)
+processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Boring R)
     = ActResult
         (st : history)
-        (findNextCmp acc (toList ls) rs rest dsp cmp (r:b))
+        (findNextCmp acc (toList ls) rs rest (predElem dsp) cmp (r:b))
+
+processAct history st Nop = ActResult (st : history) (Right st)
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
@@ -223,7 +227,7 @@ usort' fn getAct = fix f . ActResult [] . firstCmp
 
 firstCmp :: Ord a => [a] -> Either [a] (MergeState a)
 firstCmp xs = 
-    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) (PreCmp Map.empty)
+    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) (PreCmp Map.empty) []
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort
@@ -243,5 +247,5 @@ dsort = usort' pTraceShowId
 
 -- | Compares with '(<=)'
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
-realCompare (MergeState _ (l:|_) (r:|_) _ _ _)
+realCompare (MergeState _ (l:|_) (r:|_) _ _ _ _)
     = pure $ Choose $ if l <= r then L else R
