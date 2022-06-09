@@ -115,20 +115,20 @@ processAct
     -> Action a -- ^ to be processed
     -> ActResult a
 
-processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp) (Delete L)
+processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp b) (Delete L)
     = ActResult
         (st : history)
-        (findNextCmp acc ls (r:rs) rest dsp cmp)
-processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp) (Delete R)
+        (findNextCmp acc ls (r:rs) rest dsp cmp b)
+processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp b) (Delete R)
     = ActResult
         (st : history)
-        (findNextCmp acc (l:ls) rs rest dsp cmp)
+        (findNextCmp acc (l:ls) rs rest dsp cmp b)
 
 processAct history st@(MergeState _ (_:|ls) _ _ _ _) (Edit L new)
     = ActResult
         (st : history)
         (Right st { _left = new :| ls })
-processAct history st@(MergeState _ _ (_:|rs) _ _ _) (Edit R new)
+processAct history st@(MergeState _ _ (_:|rs) _ _ _ _) (Edit R new)
     = ActResult
         (st : history)
         (Right st { _right = new :| rs })
@@ -138,25 +138,34 @@ processAct (s:ss) _ Undo = ActResult ss (Right s)
 
 -- Override: mostly sorted input on first pass
 processAct
-    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp cmp) (Choose L)
+    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp cmp b) (Choose L)
     = ActResult
         (st : history)
-        (findNextCmp (l : acc) [r] [f] fs (succCnt dsp) cmp)
+        (findNextCmp (l : acc) [r] [f] fs (succCnt dsp) cmp b)
 -- Break on out-of-order elems.
-processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp) (Choose R) =
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp b) (Choose R) =
     let newCmp = stoRCmp l r cmp
     in ActResult
         (st : history)
-        (findNextCmp (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp)
+        (findNextCmp (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp b)
 
-processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp) (Choose L)
+processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp b) (Choose L)
     = ActResult
         (st : history)
-        (findNextCmp (l : acc) ls (toList rs) rest (succCnt dsp) cmp)
-processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp) (Choose R)
+        (findNextCmp (l : acc) ls (toList rs) rest (succCnt dsp) cmp b)
+processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Choose R)
     = ActResult
         (st : history)
-        (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) cmp)
+        (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) cmp b)
+
+processAct history st@(MergeState acc (l:ls) rs rest dsp cmp b) (Boring L)
+    = ActResult
+        (st : history)
+        (findNextCmp acc ls (toList rs) rest dsp cmp (l:b))
+processAct history st@(MergeState acc ls (r:rs) rest dsp cmp b) (Boring R)
+    = ActResult
+        (st : history)
+        (findNextCmp acc (toList ls) rs rest dsp cmp (r:b))
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
@@ -170,16 +179,17 @@ findNextCmp
     -> [a] -- ^ right merge workspace
     -> [NonEmpty a] -- ^ lists that have yet to be merged
     -> DisplayState -- ^ the new displayState to use
-    -> PreCmp a
+    -> PreCmp a -- ^ precmp map
+    -> [a] -- ^ boring items
     -> Either [a] (MergeState a)
-findNextCmp w x y z d cmp = fix f w x y z
+findNextCmp w x y z d cmp b = fix f w x y z
     where
     -- start populating workspace
     f nxt [] [] [] (q:rest) = nxt [] (toList q) [] rest
     -- finish populating workspace
-    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d cmp)
+    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d cmp b)
     -- the final merge
-    f _ acc [] [] [] = Left (reverse acc)
+    f _ acc [] [] [] = Left (reverse (b ++ acc))
     -- clean out remaining in left
     f nxt acc l@(_:_) [] rest = nxt (reverse l ++ acc) [] [] rest
     -- clean out remaining in right
@@ -190,7 +200,7 @@ findNextCmp w x y z d cmp = fix f w x y z
             Just L -> nxt (l : acc) ls (r:rs) rest
             Just R -> nxt (r : acc) (l:ls) rs rest
             -- lo, an actual merge
-            Nothing -> Right (MergeState acc (l:|ls) (r:|rs) rest d cmp)
+            Nothing -> Right (MergeState acc (l:|ls) (r:|rs) rest d cmp b)
     -- finalize last merge
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
