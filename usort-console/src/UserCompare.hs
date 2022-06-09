@@ -18,6 +18,7 @@ userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt est) _) = do
         '2' -> pure $ Choose R
         'd' -> Delete <$> delItem
         'e' -> either (Edit L) (Edit R) <$> editItem l r
+        'i' -> either (Boring L) (Boring R) <$> boringItem l r
         'u' -> pure Undo
         _   -> unknownCommand (userCompare m)
 
@@ -47,6 +48,14 @@ editItem x y = do
         '2' -> Right <$> replaceText y
         _   -> unknownCommand (editItem x y)
 
+boringItem :: Text -> Text -> IO (Either Text Text)
+    putStr "Lol, which item is boring? > "
+    c <- getResponse
+    case c of
+        '1' -> pure L
+        '2' -> pure R
+        _   -> unknownCommand boringItem
+
 replaceText :: MonadException m => Text -> m Text
 replaceText t = do
     replaced <-
@@ -69,9 +78,11 @@ printPrompt (remaining, estimate, x, y) = do
         , ""
         , ySummary
         , ""
-        , "-- Or [e]dit an entry"
-        , "-- Or [u]ndo last comparison"
-        , "-- Or [d]elete an entry"
+        , "-- Or:"
+        , "--   [e]dit an entry,"
+        , "--   [u]ndo last comparison,"
+        , "--   [d]elete an entry,"
+        , "--   [i]gnore an entry
         ]
     T.putStr "-> "
   where
