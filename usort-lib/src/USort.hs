@@ -41,7 +41,7 @@ data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo
 -- | Data relevant for the UI, but not the merge itself.
 data DisplayState = DisplayState
     { numActs :: Int
-    , estActs :: Int
+    , numElems :: Int
     }
     deriving (Eq, Show, Generic)
 
@@ -118,11 +118,11 @@ processAct
 processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp b) (Delete L)
     = ActResult
         (st : history)
-        (findNextCmp acc ls (r:rs) rest dsp cmp b)
+        (findNextCmp acc ls (r:rs) rest (predElem dsp) cmp b)
 processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp b) (Delete R)
     = ActResult
         (st : history)
-        (findNextCmp acc (l:ls) rs rest dsp cmp b)
+        (findNextCmp acc (l:ls) rs rest (predElem dsp) cmp b)
 
 processAct history st@(MergeState _ (_:|ls) _ _ _ _) (Edit L new)
     = ActResult
@@ -161,14 +161,17 @@ processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Choose R)
 processAct history st@(MergeState acc (l:ls) rs rest dsp cmp b) (Boring L)
     = ActResult
         (st : history)
-        (findNextCmp acc ls (toList rs) rest dsp cmp (l:b))
-processAct history st@(MergeState acc ls (r:rs) rest dsp cmp b) (Boring R)
+        (findNextCmp acc ls (toList rs) rest (predElem dsp) cmp (l:b))
+processAct history st@(MergeState acc ls (r:rs) rest (predElem dsp) cmp b) (Boring R)
     = ActResult
         (st : history)
         (findNextCmp acc (toList ls) rs rest dsp cmp (r:b))
 
 succCnt :: DisplayState -> DisplayState
 succCnt (DisplayState c s) = DisplayState (succ c) s
+
+predElem :: DisplayState -> DisplayState
+predElem (DisplayState c s) = DisplayState c (pred s)
 
 -- | Find the next state that needs a comparison, or abort with the final
 -- list.
@@ -220,10 +223,7 @@ usort' fn getAct = fix f . ActResult [] . firstCmp
 
 firstCmp :: Ord a => [a] -> Either [a] (MergeState a)
 firstCmp xs = 
-    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 est) (PreCmp Map.empty)
-    where
-    est = round (num * log num)
-    num :: Double = fromIntegral (length xs)
+    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) (PreCmp Map.empty)
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort

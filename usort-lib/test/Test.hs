@@ -63,8 +63,8 @@ instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
             n <- getSize
             ct <- choose (0,n)
             let ct' = fromIntegral ct
-            let est = round (ct' * log ct')
-            pure (DisplayState ct est)
+            let numElems = length acc + getSum (foldMap (Sum . length) (left:right:rest))
+            pure (DisplayState ct numElems)
         preCmp <- do
             -- Actually, this is not straightforward. I could just generate a
             -- random one, but how do I generate a *valid* one? We can't have a

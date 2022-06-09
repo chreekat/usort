@@ -10,8 +10,8 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 userCompare :: MergeState Text -> IO (Action Text)
-userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt est) _) = do
-    printPrompt (dspCnt, est, l, r)
+userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _) = do
+    printPrompt (dspCnt, numElem, l, r)
     c <- getResponse
     case c of
         '1' -> pure $ Choose L
@@ -64,7 +64,7 @@ replaceText t = do
     return (maybe t T.pack replaced)
 
 printPrompt :: (Int, Int, Text, Text) -> IO ()
-printPrompt (remaining, estimate, x, y) = do
+printPrompt (remaining, numElem, x, y) = do
     mapM_
         T.putStrLn
         [ "############################################################"
@@ -82,10 +82,11 @@ printPrompt (remaining, estimate, x, y) = do
         , "--   [e]dit an entry,"
         , "--   [u]ndo last comparison,"
         , "--   [d]elete an entry,"
-        , "--   [i]gnore an entry
+        , "--   [i]gnore an entry"
         ]
     T.putStr "-> "
   where
+    estimate = (\x -> x * log x) (fromIntegral numElem)
     xSummary = shorten x
     ySummary = shorten y
     shorten s = T.append summ ellipsis
