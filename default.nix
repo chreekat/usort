@@ -1,8 +1,8 @@
 { sources ? import ./nix/sources.nix
 }:
 let
-    miso = import sources.miso {};
-    pkgs = miso.pkgs;
+    np = sources.nixpkgs;
+    pkgs = import np { inherit config; };
     h = pkgs.haskell.lib;
 
     gitignoreSrc =
@@ -13,66 +13,29 @@ let
     unmarkBroken = drv: h.overrideCabal drv (drv: { broken = false; });
 
     extensions = self: super: {
+      termbox-banana = unmarkBroken super.termbox-banana;
       usort-lib =
         self.callCabal2nix
           "usort-lib"
           (localSrc ./usort-lib)
           {};
 
-      jsaddle-warp =
-        unmarkBroken
-          (h.dontCheck
-            (h.appendPatch
-              super.jsaddle-warp
-              ./nix/patches/jsaddle.patch));
-
-      # overrideAttrs (_:  {
-      #   #src = ../../src/jsaddle/jsaddle-warp;
-      #   patches = [ ./nix/patches/jsaddle.patch ];
-      # });
-
       usort-console =
           self.callCabal2nix
               "usort-console"
               (localSrc ./usort-console)
               {};
-
-      usort-web-client =
-          self.callCabal2nix
-              "usort-web"
-              (localSrc ./usort-web)
-              {};
-
-      usort-web-jsaddle =
-          self.callCabal2nix
-              "usort-web"
-              (localSrc ./usort-web)
-              { miso = miso.miso-jsaddle; };
-
     };
-    reload-script = pkgs.writeScriptBin "reload" ''
-      ${ghcPkgs.ghcid}/bin/ghcid -c \
-        '${ghcPkgs.cabal-install}/bin/cabal new-repl' \
-        -o errors.err \
-        -r
-    '';
 
-    ghcPkgs = pkgs.haskell.packages.ghc865.override { overrides = extensions; };
-    ghcjsPkgs = pkgs.haskell.packages.ghcjs86.override { overrides = extensions; };
+    config = {
+      packageOverrides = pkgs: {
+        haskellPackages = pkgs.haskellPackages.override {
+          overrides = extensions;
+        };
+      };
+    };
 
 in rec {
 
-    inherit (ghcPkgs) usort-lib usort-console usort-web-jsaddle;
-
-    inherit (ghcjsPkgs) usort-web-client;
-
-    shells = {
-        jsaddle = ghcPkgs.usort-web-jsaddle.env.overrideAttrs (old: {
-          buildInputs = old.buildInputs ++ [reload-script];
-        });
-
-        ci = pkgs.mkShell {
-            buildInputs = [ pkgs.cachix ];
-        };
-    };
+    inherit (pkgs.haskellPackages) usort-lib usort-console;
 }
