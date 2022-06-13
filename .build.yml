@@ -1,8 +1,7 @@
-image: nixos/20.03
+image: nixos/22.05
 sources:
   - https://git.sr.ht/~chreekat/usort
 tasks:
   - nix-build: |
       cd usort
-      nix-shell -A shells.ci --run 'cachix use miso-haskell'
       nix-build --quiet
