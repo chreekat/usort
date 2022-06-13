@@ -27,11 +27,13 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
-    , formatting ^>= 6.3
+      base >=4.7
+    , brick
+    , formatting >= 6.3
     , usort-lib
-    , text ^>= 1.2
-    , haskeline >=0.7.2.1 && < 0.8
+    , text >= 1.2
+    -- TODO: remove once brick (or termbox or vty lol) is  fully in use
+    , haskeline >=0.7.2.1
   if flag(pedantic)
     ghc-options: -Werror -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
 
@@ -50,7 +52,7 @@ executable insort
     , usort-console
     , usort-lib
   if flag(pedantic)
-    ghc-options: -Wall -Werror
+    ghc-options: -Werror -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   default-language: Haskell2010
 
 executable usort
@@ -62,8 +64,9 @@ executable usort
   build-depends:
       base
     , text
+    , brick
     , usort-console
     , usort-lib
   if flag(pedantic)
-    ghc-options: -Wall -Werror
+    ghc-options: -Werror -Wall -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints
   default-language: Haskell2010

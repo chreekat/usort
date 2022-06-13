@@ -57,7 +57,7 @@ boringItem = do
         '2' -> pure R
         _   -> unknownCommand boringItem
 
-replaceText :: MonadException m => Text -> m Text
+replaceText :: Text -> IO Text
 replaceText t = do
     replaced <-
         runInputT defaultSettings

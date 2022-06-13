@@ -226,7 +226,7 @@ tests = testGroup
     , testCase "mostly sorted input" $
         let
             Right initState =
-                findNextCmp @ Int
+                findNextCmp @Int
                     []
                     []
                     []
