@@ -1,1 +1,1 @@
-(import ../default.nix { }).shells.shell
+(import ../. {}).usort-console.env

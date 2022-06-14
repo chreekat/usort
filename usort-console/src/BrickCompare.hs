@@ -1,25 +1,36 @@
 module BrickCompare (main) where
 
 import Brick
-import Brick.Widgets.Center
+import Brick.Types
 import Brick.Widgets.Border
 import Brick.Widgets.Border.Style
+import Brick.Widgets.Center
+import Graphics.Vty
 
 import USort
 
 
 
 main :: IO ()
-main = simpleMain (cmpWidget (4,6) fi se)
+main = defaultMain
+    (App
+        (const [delWidget, cmpWidget (4,6) fi se])
+        neverShowCursor
+        (\s -> const (halt s))
+        pure
+        (const $ attrMap (white `on` black) []))
+    ()
+
+
 
 fi = "blah blah some stuff\n    multi line, why not"
 se = "Another thing lol"
 
 cmpWidget :: (Int, Int) -> String -> String -> Widget ()
 cmpWidget (i,t) a b =
-    withBorderStyle unicode (header i t <=> body a b <=> footer)
+    withBorderStyle unicode (cmpHeader i t <=> cmpBody a b <=> footer)
 
-header i t =
+cmpHeader i t =
     let (i', t') = (show i, show t)
         counter = "Comparison " <> i' <> " of ~" <> t'
     in
@@ -29,13 +40,17 @@ header i t =
             <+> fill ' '
             <+> border (str counter))
 
-obj i s = joinBorders $
+cmpObj i s = joinBorders $
     border (str $ "[" <> show i <> "]")
     <=> border (str s <+> fill ' ')
 
 footer = 
     vLimit 3 $ border $
-        str "Or: [e]dit an entry, [u]ndo last comparison, [d]elete an entry, [i]gnore an entry"
-        <+> fill ' '
+        padRight Max $ str "Or: [e]dit an entry, [u]ndo last comparison, [d]elete an entry, [i]gnore an entry"
 
-body a b = obj 1 a <=> obj 2 b
+cmpBody a b = cmpObj 1 a <=> cmpObj 2 b
+
+
+delWidget =
+    vLimit 3 $ border $
+        padRight Max $ str "Delete which item? > "
