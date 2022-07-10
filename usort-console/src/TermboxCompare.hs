@@ -1,13 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 
-module TermboxUI where
+module TermboxCompare where
 
 import Termbox.Internal
 import qualified Termbox
 
+
 -- FIXME: Drawing funcs should be in a Thingy/Monad that has starting
 -- coordinate, width, height, among other things
 
+-- Dummy main for ghcid
 main :: IO ()
 main =
     Termbox.run (\width height render poll -> loop width height render poll 0)

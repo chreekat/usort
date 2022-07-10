@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module UserCompare (userCompare) where
+module StdoutCompare (stdoutCompare) where
 
 import USort
 import Data.Text (Text)
@@ -9,8 +9,8 @@ import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-userCompare :: MergeState Text -> IO (Action Text)
-userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _ _) = do
+stdoutCompare :: MergeState Text -> IO (Action Text)
+stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _ _) = do
     printPrompt (dspCnt, numElem, l, r)
     c <- getResponse
     case c of
@@ -20,7 +20,7 @@ userCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _ _) =
         'e' -> either (Edit L) (Edit R) <$> editItem l r
         'i' -> Boring <$> boringItem
         'u' -> pure Undo
-        _   -> unknownCommand (userCompare m)
+        _   -> unknownCommand (stdoutCompare m)
 
 getResponse :: IO Char
 getResponse = getChar <* putStrLn ""

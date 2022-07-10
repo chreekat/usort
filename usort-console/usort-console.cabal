@@ -41,8 +41,8 @@ library
 
   exposed-modules:
       App
-      UserCompare
-      BrickCompare
+      StdoutCompare
+      TermboxCompare
   default-language: Haskell2010
 
 executable insort
