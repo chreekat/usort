@@ -5,13 +5,41 @@ module TermboxCompare where
 import Termbox.Internal
 import qualified Termbox
 
+import USort
+import USort.Console (cliItems)
 
 -- FIXME: Drawing funcs should be in a Thingy/Monad that has starting
 -- coordinate, width, height, among other things
 
--- Dummy main for ghcid
+termboxCompare :: Q -> MergeState Text -> IO (Action Text)
+termboxCompare = undefined -- wait
+
+-- New strategy. findNextCmp really is the entrypoint to usort, so we'll just
+-- use it. We can bring up and tear down the termbox ui whenever we dang well
+-- please.
+-- 
+-- So, we start the same way we already start in Main.
+
 main :: IO ()
-main =
+main = do
+    Items b is <- cliItems
+    let res = firstCmp is
+    sorted <- case res of
+        Left js -> pure js
+        Right mergeSt -> termboxSort mergeSt
+    putStrLn (joinItems (Items b sorted))
+
+
+termboxSort st = do
+    -- Show the cmp page
+    -- If user makes a selection, find next cmp and loop
+    -- If user does one of the things that doesn't require tearing down termbox,
+    -- just.. don't do that.
+    -- If the user *does* choose something that requires tearing down termbox
+    -- (which is just edit, so you can go to $EDITOR), then bail out with that
+    -- case. That means we need a new case for returns from the termbox: done
+    -- with a list, or need-to-edit with the thing that needs editing.
+
     Termbox.run (\width height render poll -> loop width height render poll 0)
 
 renderUs r = r . mconcat

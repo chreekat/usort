@@ -13,15 +13,19 @@ import qualified Data.Text as T
 import USort
 import SplitItems
 
-main :: (MergeState Text -> IO (Action Text)) -> IO ()
-main sortFn = do
+cliItems :: IO Items
+cliItems = do
     as <- getArgs
-    (Items b is) <- splitItems . lines <$> case as of
+    splitItems . lines <$> case as of
         [] -> do
             dup <- hDuplicate stdin
             maybe (pure ()) (hSetEncoding dup) =<< hGetEncoding stdin
             hGetContents dup
         xs -> concat <$> traverse readFile xs
+
+main :: (MergeState Text -> IO (Action Text)) -> IO ()
+main sortFn = do
+    Items b is <- cliItems
     hSetBuffering stdout NoBuffering
     hSetBuffering stdin NoBuffering
     (putStr . unlines . map (T.replicate b " " <>))
