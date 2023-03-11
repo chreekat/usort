@@ -1,18 +1,35 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- | Remember comparisons.
 module Remember where
 
 import Control.Applicative
 import Data.Coerce
-import Data.Hashable
 import Data.Foldable
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 
--- | Keep a list of seen comparisons
-newtype Compared = Compared (Map.Map (Int, Int) Ordering)
-    deriving (Eq, Show)
+-- | A class of invertible types.
+--
+-- A law would be invert (invert a) == a.
+class Invertible a where
+    invert :: a -> a
 
-uncompared = Compared (Map.empty)
+-- | Keep a list of seen comparisons. It maps two values to a comparison result.
+newtype Compared val cmp = Compared (Map.Map (val, val) cmp)
+    deriving (Eq, Show, Semigroup, Monoid)
+
+-- | Check if two values have a comparison
+recompare :: (Ord val, Invertible cmp) => val -> val -> Compared val cmp -> Maybe cmp
+recompare a b (Compared c) =
+    (Map.lookup (a, b) c) <|> (invert <$> Map.lookup (b, a) c)
+
+-- | Observe a comparison
+observe :: (Ord val, Invertible cmp) => val -> val -> cmp -> Compared val cmp -> Compared val cmp
+observe a b cmp c =
+    case recompare a b c of
+        Just _ -> c
+        Nothing -> coerce (Map.insert (a, b) cmp) c
 
 -- | Things remembered.
 newtype Mem'd a = Mem'd (IntMap.IntMap a) deriving (Eq, Show)
@@ -32,21 +49,6 @@ noMem'd = Mem'd (IntMap.empty)
 
 stoMem'd :: Int -> a -> Mem'd a -> Mem'd a
 stoMem'd i a = coerce (IntMap.insert i a)
-
--- | Divine whether two items have ever been compared
-divine :: Int -> Int -> Compared -> Maybe Ordering
-divine i j (Compared c) = Map.lookup (i, j) c <|> fmap inv (Map.lookup (j, i) c)
-  where
-    inv LT = GT
-    inv GT = LT
-    inv EQ = EQ
-
--- | Store an ordering if it's new
-sto :: Int -> Int -> Ordering -> Compared -> Compared
-sto i j which c =
-    case divine i j c of
-        Just _ -> c
-        Nothing -> coerce (Map.insert (i, j) which) c
 
 {- | Properties
  -
