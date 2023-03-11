@@ -51,6 +51,12 @@ data DisplayState = DisplayState
     }
     deriving (Eq, Show, Generic)
 
+succCnt :: DisplayState -> DisplayState
+succCnt (DisplayState c s) = DisplayState (succ c) s
+
+predElem :: DisplayState -> DisplayState
+predElem (DisplayState c s) = DisplayState c (pred s)
+
 -- | In the midst of a merge, this is the state to act upon.
 data MergeState a = MergeState
     { _acc :: [a]
@@ -176,12 +182,6 @@ processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Boring R)
         (findNextCmp acc (toList ls) rs rest (predElem dsp) cmp (r:b))
 
 processAct history st Nop = ActResult (st : history) (Right st)
-
-succCnt :: DisplayState -> DisplayState
-succCnt (DisplayState c s) = DisplayState (succ c) s
-
-predElem :: DisplayState -> DisplayState
-predElem (DisplayState c s) = DisplayState c (pred s)
 
 -- | Find the next state that needs a comparison, or abort with the final
 -- list.
