@@ -28,11 +28,17 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Compared
+
 import Debug.Pretty.Simple
 
 -- | Decisions, decisions.
 data Choice = L | R
     deriving (Eq, Show)
+
+instance Invertible Choice where
+    invert L = R
+    invert R = L
 
 -- | Merge actions (things a user may do)
 data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo | Boring Choice | Nop

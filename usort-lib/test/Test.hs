@@ -1,6 +1,8 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-type-defaults #-}
@@ -11,6 +13,7 @@ import Test.Tasty.Golden
 
 import Data.Bifunctor
 import Data.Functor.Identity
+import Data.Foldable
 import Data.List (sort, nub)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Monoid
@@ -22,6 +25,7 @@ import qualified Data.Text.IO as T
 
 import USort
 import SplitItems
+import Compared
 
 -- | Shrinks to 0s
 instance Arbitrary DisplayState where
@@ -48,6 +52,8 @@ instance (Arbitrary a, Ord a) => Arbitrary (PreCmp a) where
                         map (Map.fromList . map (second Set.fromList))
                             shrinkQs
                 in map PreCmp shrinkXs
+deriving instance (Ord a, Arbitrary a) => Arbitrary (ElementMap a)
+deriving instance (Ord val, Arbitrary val, Arbitrary cmp) => Arbitrary (Compared val cmp)
 
 
 -- | Size parameter is taken to mean "order of the number of elements left to be
@@ -330,21 +336,14 @@ tests = testGroup
           -- * if we account for delete, some tests should check it makes sense
         ]
     -}
+
     , testGroup
-        "PreCmp and friends"
-        [ testProperty "PreCmp preserves choice" propPreserveChoice
+        "Compared"
+        [ testProperty "observe idempotent" $ \(i :: Int) j (o :: Choice) c -> i /= j ==> (let new = observe i j o c in recompare i j new === Just o)
+        , testProperty "inverted observe idempotent" $ \(i :: Int) j (o :: Choice) c -> i /= j ==> (let new = observe i j o c in recompare j i new === Just (invert o))
+        , testProperty "order matters" $ \(i :: Int) j (o :: Choice) -> i /= j ==> recompare j i (observe i j o mempty) === Just (invert o)
         ]
     ]
-
-propPreserveChoice :: Int -> Int -> PreCmp Int -> Property
-propPreserveChoice l r m =
-    let m' = stoRCmp l r m
-        c = reCmp l r m'
-    in
-        l /= r ==>
-        reCmp l r m /= Just L ==>
-        -- ^ Make sure the opposite wasn't in the arbitrary input
-        c === Just R
 
 propCountChoose :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
 propCountChoose h (TwoActions st) (NotUndo act) =
@@ -354,6 +353,7 @@ propCountChoose h (TwoActions st) (NotUndo act) =
     in classify (isChoice act) "Choose" $ case act of
         Choose _ -> _display newState === succCnt (_display st)
         _ -> _display newState === _display st
+
 propUndo :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
 propUndo h (TwoActions st) (NotUndo act) =
     let ActResult newHist (Right newState) = processAct h st act
