@@ -90,7 +90,7 @@ splitItems input =
 
 -- | Reform that which had been sundered.
 joinItems :: Items -> Text
-joinItems (Items b is) = unlines (map (T.replicate b " " <>) is)
+joinItems (Items b is) = T.unlines (map (T.replicate b " " <>) is)
 
 -- | Sort of like multiple splitAts; each i in 'splitSegments is' is the start
 -- of a new segment.
