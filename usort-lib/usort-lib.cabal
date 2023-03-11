@@ -35,7 +35,7 @@ library
   exposed-modules:
       USort
       SplitItems
-      Remember
+      Compared
   default-language: Haskell2010
 
 test-suite usort-test
