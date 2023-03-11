@@ -23,12 +23,15 @@ recompare :: (Ord val, Invertible res) => val -> val -> Compared val res -> Mayb
 recompare a b (Compared c) =
     (Map.lookup (a, b) c) <|> (invert <$> Map.lookup (b, a) c)
 
--- | Observe a comparison
-observe :: (Ord val, Invertible cmp) => val -> val -> cmp -> Compared val cmp -> Compared val cmp
-observe a b cmp c =
-    case recompare a b c of
-        Just _ -> c
-        Nothing -> coerce (Map.insert (a, b) cmp) c
+-- | Observe a comparison. If the two values have already been compared, this
+-- replaces the old result.
+observe :: (Ord val, Invertible res) => val -> val -> res -> Compared val res -> Compared val res
+observe a b res (Compared c) =
+    -- If the inverted comparison already exists, update that instead.
+    case Map.lookup (b,a) c of
+        Just _ -> coerce (Map.insert (b, a) (invert res) c)
+        _ -> coerce (Map.insert (a, b) res c)
+
 
 
 
