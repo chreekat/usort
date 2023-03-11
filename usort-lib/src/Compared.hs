@@ -7,7 +7,6 @@ import Control.Applicative
 import Data.Coerce
 import Data.Foldable
 import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
 
 -- | A class of invertible types.
 --
@@ -16,11 +15,11 @@ class Invertible a where
     invert :: a -> a
 
 -- | Keep a list of seen comparisons. It maps two values to a comparison result.
-newtype Compared val cmp = Compared (Map.Map (val, val) cmp)
+newtype Compared val res = Compared (Map.Map (val, val) res)
     deriving (Eq, Show, Semigroup, Monoid)
 
 -- | Check if two values have a comparison
-recompare :: (Ord val, Invertible cmp) => val -> val -> Compared val cmp -> Maybe cmp
+recompare :: (Ord val, Invertible res) => val -> val -> Compared val res -> Maybe res
 recompare a b (Compared c) =
     (Map.lookup (a, b) c) <|> (invert <$> Map.lookup (b, a) c)
 
@@ -31,34 +30,21 @@ observe a b cmp c =
         Just _ -> c
         Nothing -> coerce (Map.insert (a, b) cmp) c
 
--- | Things remembered.
-newtype Mem'd a = Mem'd (IntMap.IntMap a) deriving (Eq, Show)
+
+
+
+-- | I want to remember comparisons between elements even if the element is
+-- later edited. Thus I need an initial, stable key to track actions and
+-- elements separately. If I simply use the initial value as the stable key, it
+-- may simplify tests later by allowing me to make the mapping optional.
+newtype ElementMap a = ElementMap (Map.Map a a) deriving (Eq, Show, Semigroup, Monoid)
 
 -- | Given a list of things, keep them and their keys, forever.
-remember :: (Foldable f) => f a -> Mem'd a
-remember = Mem'd . IntMap.fromAscList . zip [1..] . toList
+elementMap :: (Foldable f, Ord a) => f a -> ElementMap a
+elementMap = coerce . Map.fromList . fmap (\x -> (x,x)) . toList
 
--- | Remember ints
-rememberInts :: (Foldable f) => f Int -> Mem'd Int
-rememberInts = Mem'd . IntMap.fromList . fmap (\x -> (x,x)) . toList
+element :: Ord a => a -> ElementMap a -> a
+element a (ElementMap m) = m Map.! a
 
-memKeys (Mem'd m) = IntMap.keys m
-recall i (Mem'd m) = m IntMap.! i
-
-noMem'd = Mem'd (IntMap.empty)
-
-stoMem'd :: Int -> a -> Mem'd a -> Mem'd a
-stoMem'd i a = coerce (IntMap.insert i a)
-
-{- | Properties
- -
- - * sto is idempotent
- -
- - forall i j o@(elem [LT GT]) c -> let new = sto i j o c
-                                    in divine i j new = Just o
- -                                     divine j i new = Just (inv o)
- -
- - * order matters
- -
- - forall i j o@(elem [LT GT]) -> divine j i (sto i j o Ø) == Just (inv o)
- -}
+insertEl :: Ord a => a -> a -> ElementMap a -> ElementMap a
+insertEl k v = coerce (Map.insert k v)
