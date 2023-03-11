@@ -68,50 +68,13 @@ data MergeState a = MergeState
     , _rest :: [NonEmpty a]
     -- ^ lists left to process
     , _display :: DisplayState
-    , _preCmps :: PreCmp a
+    , _memory :: ElementMap a
+    , _preCmps :: Compared a Choice
     -- ^ Record previous comparisons
-    --
-    -- We need this when optimizing for mostly-sorted lists.
     , _boring :: [a]
     -- ^ Items we don't sort
     }
     deriving (Eq, Show, Generic)
-
--- If a value is in the set, then the key beats the value.
-newtype PreCmp a = PreCmp (Map a (Set a))
-    deriving (Eq, Show, Generic)
-
--- | Empty
-noCmp :: PreCmp a
-noCmp = PreCmp Map.empty
-
--- Assume 'Choose R', so that the second element beats the first.
---
--- If the reverse truth is already in the system, return the original list. We
--- don't do error checking because this should only happen when creating
--- Arbitrary PreCmps. (Famous last words.)
-stoRCmp :: Ord a => a -> a -> PreCmp a -> PreCmp a
-stoRCmp l r p@(PreCmp m)
-    | reCmp l r p == Just L = p
-    | otherwise =
-        let m' = Map.singleton r (Set.singleton l)
-        in PreCmp (Map.unionWith Set.union m m')
-
--- (Re) compare two elements, using the pre-compare map.
-reCmp :: Ord a => a -> a -> PreCmp a -> Maybe Choice
-reCmp l r (PreCmp m) =
-    -- l beats r if l points to a set and r is in it.
-    --
-    -- r beats l if r points to a set and l is in it.
-    --
-    -- It should never be the case that both these things are true. We could
-    -- make a smart constructor if we so desired...
-    --
-    -- Anyway,
-    let a `beats` b = maybe False (Set.member b) (Map.lookup a m)
-        chooseL = if l `beats` r then Just L else Nothing
-        chooseR = if r `beats` l then Just R else Nothing
-    in chooseL <|> chooseR
 
 -- | Holds the new history and the next merge state.
 data ActResult a
@@ -129,57 +92,62 @@ processAct
     -> Action a -- ^ to be processed
     -> ActResult a
 
-processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp cmp b) (Delete L)
+processAct history st@(MergeState acc (_:|ls) (r:|rs) rest dsp _mem cmp b) (Delete L)
     = ActResult
         (st : history)
-        (findNextCmp acc ls (r:rs) rest (predElem dsp) cmp b)
-processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp cmp b) (Delete R)
+        (findNextCmp acc ls (r:rs) rest (predElem dsp) _mem cmp b)
+processAct history st@(MergeState acc (l:|ls) (_:|rs) rest dsp _mem cmp b) (Delete R)
     = ActResult
         (st : history)
-        (findNextCmp acc (l:ls) rs rest (predElem dsp) cmp b)
+        (findNextCmp acc (l:ls) rs rest (predElem dsp) _mem cmp b)
 
-processAct history st@(MergeState _ (_:|ls) _ _ _ _ _) (Edit L new)
-    = ActResult
+processAct history st (Edit L new)
+    = let newMem = insertEl (NE.head (_left st)) new (_memory st)
+       in ActResult
         (st : history)
-        (Right st { _left = new :| ls })
-processAct history st@(MergeState _ _ (_:|rs) _ _ _ _) (Edit R new)
-    = ActResult
+        (Right st { _memory = newMem })
+processAct history st (Edit R new)
+    = let newMem = insertEl (NE.head (_right st)) new (_memory st)
+       in ActResult
         (st : history)
-        (Right st { _right = new :| rs })
+        (Right st { _memory = newMem })
 
 processAct [] state Undo = ActResult [] (Right state)
 processAct (s:ss) _ Undo = ActResult ss (Right s)
 
 -- Override: mostly sorted input on first pass
 processAct
-    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp cmp b) (Choose L)
-    = ActResult
+    history st@(MergeState acc (l:|[]) (r:|[]) ((f:|[]):fs) dsp _mem cmp b) (Choose L)
+    = let newCmp = observe l r L cmp
+      in ActResult
         (st : history)
-        (findNextCmp (l : acc) [r] [f] fs (succCnt dsp) cmp b)
+        (findNextCmp (l : acc) [r] [f] fs (succCnt dsp) _mem newCmp b)
 -- Break on out-of-order elems.
-processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp cmp b) (Choose R) =
-    let newCmp = stoRCmp l r cmp
-    in ActResult
+processAct history st@(MergeState acc (l:|[]) (r:|[]) rest dsp _mem cmp b) (Choose R)
+    = let newCmp = observe l r R cmp
+      in ActResult
         (st : history)
-        (findNextCmp (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) newCmp b)
+        (findNextCmp (l : acc) [] [] ((r:|[]) : rest) (succCnt dsp) _mem newCmp b)
 
-processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp b) (Choose L)
-    = ActResult
+processAct history st@(MergeState acc (l:|ls) rs@(r:|_) rest dsp _mem cmp b) (Choose L)
+    = let newCmp = observe l r L cmp
+      in ActResult
         (st : history)
-        (findNextCmp (l : acc) ls (toList rs) rest (succCnt dsp) cmp b)
-processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Choose R)
-    = ActResult
+        (findNextCmp (l : acc) ls (toList rs) rest (succCnt dsp) _mem newCmp b)
+processAct history st@(MergeState acc ls@(l:|_) (r:|rs) rest dsp _mem cmp b) (Choose R)
+    = let newCmp = observe l r R cmp
+      in ActResult
         (st : history)
-        (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) cmp b)
+        (findNextCmp (r : acc) (toList ls) rs rest (succCnt dsp) _mem newCmp b)
 
-processAct history st@(MergeState acc (l:|ls) rs rest dsp cmp b) (Boring L)
+processAct history st@(MergeState acc (l:|ls) rs rest dsp _mem cmp b) (Boring L)
     = ActResult
         (st : history)
-        (findNextCmp acc ls (toList rs) rest (predElem dsp) cmp (l:b))
-processAct history st@(MergeState acc ls (r:|rs) rest dsp cmp b) (Boring R)
+        (findNextCmp acc ls (toList rs) rest (predElem dsp) _mem cmp (l:b))
+processAct history st@(MergeState acc ls (r:|rs) rest dsp _mem cmp b) (Boring R)
     = ActResult
         (st : history)
-        (findNextCmp acc (toList ls) rs rest (predElem dsp) cmp (r:b))
+        (findNextCmp acc (toList ls) rs rest (predElem dsp) _mem cmp (r:b))
 
 processAct history st Nop = ActResult (st : history) (Right st)
 
@@ -192,28 +160,29 @@ findNextCmp
     -> [a] -- ^ right merge workspace
     -> [NonEmpty a] -- ^ lists that have yet to be merged
     -> DisplayState -- ^ the new displayState to use
-    -> PreCmp a -- ^ precmp map
+    -> ElementMap a
+    -> Compared a Choice -- ^ precmp map
     -> [a] -- ^ boring items
     -> Either [a] (MergeState a)
-findNextCmp w x y z d cmp b = fix f w x y z
+findNextCmp w x y z d _mem cmp b = fix f w x y z
     where
     -- start populating workspace
     f nxt [] [] [] (q:rest) = nxt [] (toList q) [] rest
     -- finish populating workspace
-    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d cmp b)
+    f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d _mem cmp b)
     -- the final merge
-    f _ acc [] [] [] = Left (reverse (b ++ acc))
+    f _ acc [] [] [] = Left (fmap (flip element _mem) (reverse (b ++ acc)))
     -- clean out remaining in left
     f nxt acc l@(_:_) [] rest = nxt (reverse l ++ acc) [] [] rest
     -- clean out remaining in right
     f nxt acc [] r@(_:_) rest = nxt (reverse r ++ acc) [] [] rest
     f nxt acc (l:ls) (r:rs) rest =
         -- Check for PreCmps
-        case reCmp l r cmp of
+        case recompare l r cmp of
             Just L -> nxt (l : acc) ls (r:rs) rest
             Just R -> nxt (r : acc) (l:ls) rs rest
             -- lo, an actual merge
-            Nothing -> Right (MergeState acc (l:|ls) (r:|rs) rest d cmp b)
+            Nothing -> Right (MergeState acc (l:|ls) (r:|rs) rest d _mem cmp b)
     -- finalize last merge
     f nxt (a:as) [] [] rest = nxt [] [] [] (rest ++ [NE.reverse (a:|as)])
 
@@ -232,8 +201,9 @@ usort' fn getAct = fix f . ActResult [] . firstCmp
         = getAct (fn state) >>= (nxt . processAct h state)
 
 firstCmp :: Ord a => [a] -> Either [a] (MergeState a)
-firstCmp xs = 
-    findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) (PreCmp Map.empty) []
+firstCmp xs =
+    let mem = elementMap xs
+    in findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) mem mempty []
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort
@@ -253,5 +223,5 @@ dsort = usort' pTraceShowId
 
 -- | Compares with '(<=)'
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
-realCompare (MergeState _ (l:|_) (r:|_) _ _ _ _)
+realCompare (MergeState _ (l:|_) (r:|_) _ _ _ _ _)
     = pure $ Choose $ if l <= r then L else R
