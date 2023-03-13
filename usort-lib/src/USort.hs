@@ -59,19 +59,19 @@ predElem (DisplayState c s) = DisplayState c (pred s)
 
 -- | In the midst of a merge, this is the state to act upon.
 data MergeState a = MergeState
-    { _acc :: [a]
+    { _acc :: [Int]
     -- ^ accumulator for current merge
-    , _left :: NonEmpty a
+    , _left :: NonEmpty Int
     -- ^ left workspace
-    , _right :: NonEmpty a
+    , _right :: NonEmpty Int
     -- ^ right workspace
-    , _rest :: [NonEmpty a]
+    , _rest :: [NonEmpty Int]
     -- ^ lists left to process
     , _display :: DisplayState
     , _memory :: ElementMap a
-    , _preCmps :: Compared a Choice
+    , _preCmps :: Compared Int Choice
     -- ^ Record previous comparisons
-    , _boring :: [a]
+    , _boring :: [Int]
     -- ^ Items we don't sort
     }
     deriving (Eq, Show, Generic)
@@ -154,15 +154,14 @@ processAct history st Nop = ActResult (st : history) (Right st)
 -- | Find the next state that needs a comparison, or abort with the final
 -- list.
 findNextCmp
-    :: Ord a
-    => [a] -- ^ accumulator for current merge (reverse order)
-    -> [a] -- ^ left merge workspace
-    -> [a] -- ^ right merge workspace
-    -> [NonEmpty a] -- ^ lists that have yet to be merged
+    :: [Int] -- ^ accumulator for current merge (reverse order)
+    -> [Int] -- ^ left merge workspace
+    -> [Int] -- ^ right merge workspace
+    -> [NonEmpty Int] -- ^ lists that have yet to be merged
     -> DisplayState -- ^ the new displayState to use
     -> ElementMap a
-    -> Compared a Choice -- ^ precmp map
-    -> [a] -- ^ boring items
+    -> Compared Int Choice -- ^ precmp map
+    -> [Int] -- ^ boring items
     -> Either [a] (MergeState a)
 findNextCmp w x y z d _mem cmp b = fix f w x y z
     where
@@ -202,8 +201,8 @@ usort' fn getAct = fix f . ActResult [] . firstCmp
 
 firstCmp :: Ord a => [a] -> Either [a] (MergeState a)
 firstCmp xs =
-    let mem = elementMap xs
-    in findNextCmp [] [] [] (map (:|[]) xs) (DisplayState 0 (length xs)) mem mempty []
+    let (keys, mem) = elementMap xs
+    in findNextCmp [] [] [] (map (:|[]) keys) (DisplayState 0 (length xs)) mem mempty []
 
 -- | Sorts the input, given an action that produces 'Action's!
 usort
@@ -223,5 +222,5 @@ dsort = usort' pTraceShowId
 
 -- | Compares with '(<=)'
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
-realCompare (MergeState _ (l:|_) (r:|_) _ _ _ _ _)
-    = pure $ Choose $ if l <= r then L else R
+realCompare (MergeState _ (l:|_) (r:|_) _ _ mem _ _)
+    = pure $ Choose $ if element l mem <= element r mem then L else R

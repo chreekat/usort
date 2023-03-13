@@ -7,6 +7,7 @@ import Control.Applicative
 import Data.Coerce
 import Data.List
 import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
 
 -- | A class of invertible types.
 --
@@ -40,16 +41,18 @@ observe a b res (Compared c) =
 -- later edited. Thus I need an initial, stable key to track actions and
 -- elements separately. If I simply use the initial value as the stable key, it
 -- may simplify tests later by allowing me to make the mapping optional.
-newtype ElementMap a = ElementMap (Map.Map a a) deriving (Eq, Show, Semigroup, Monoid)
+-- However, this makes it impossible to keep track of duplicate items, so I will
+-- choose an IntMap and assign unique keys.
+newtype ElementMap a = ElementMap (IntMap.IntMap a) deriving (Eq, Show, Semigroup, Monoid)
 
 -- | Given a list of things, keep them and their keys, forever.
 elementMap :: Traversable f => f a -> (f Int, ElementMap a)
 elementMap vals =
-    let ((elmap, _), keys) = mapAccumR (\(em, i) a -> ((insertEl i a em, succ i), succ i)) (mempty, 0) vals
+    let ((elmap, _), keys) = mapAccumR (\(em, i) a -> ((insertEl i a em, succ i), i)) (mempty, 0) vals
     in (keys, elmap)
 
-element :: Ord a => a -> ElementMap a -> a
-element a (ElementMap m) = m Map.! a
+element :: Int -> ElementMap a -> a
+element a (ElementMap m) = m IntMap.! a
 
-insertEl :: Ord a => a -> a -> ElementMap a -> ElementMap a
-insertEl k v = coerce (Map.insert k v)
+insertEl :: Int -> a -> ElementMap a -> ElementMap a
+insertEl k v = coerce (IntMap.insert k v)

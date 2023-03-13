@@ -1,11 +1,16 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards#-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans -Wno-type-defaults #-}
+
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
@@ -120,22 +125,19 @@ instance Arbitrary Choice where
 main :: IO ()
 main = defaultMain tests
 
+data Quick a = Quick [a] [a] [a] [NonEmpty a] [a]
+    deriving (Eq, Show, Functor, Foldable, Traversable)
+
 tests :: TestTree
 tests = testGroup
     "tests"
     [ testGroup
         "findNextCmp"
         (let nullDsp = DisplayState 0 0
-             -- Need type sig to use type application below
-             findNextCmp'
-                :: [Int]
-                -> [Int]
-                -> [Int]
-                -> [NonEmpty Int]
-                -> [Int]
-                -> Either [Int] (MergeState Int)
-             findNextCmp' a b c d e = findNextCmp a b c d nullDsp mem mempty e
-                where mem = elementMap (concat [a, b, c, e] <> concatMap toList d)
+             findNextCmp' a b c d e = findNextCmp @Int a' b' c' d' nullDsp mem mempty e'
+                where (Quick a' b' c' d' e', mem) = elementMap (Quick a b c d e)
+             findNextCmp'' a b c d e = (q, findNextCmp @Int a' b' c' d' nullDsp mem mempty e')
+                where (q@(Quick a' b' c' d' e'), mem) = elementMap (Quick a b c d e)
         in
         [ testCase "empty" $ findNextCmp' [] [] [] [] [] @?= Left []
         , testCase "single" $ findNextCmp' [] [] [] [42 :| []] [] @?= Left [42]
@@ -144,17 +146,45 @@ tests = testGroup
         , testCase "weirdR" $ findNextCmp' [] [] [42] [] [] @?= Left [42]
         , testCase "lastL" $ findNextCmp' [42] [47] [] [] [] @?= Left [42, 47]
         , testCase "lastR" $ findNextCmp' [42] [] [47] [] [] @?= Left [42, 47]
-        , testProperty "ready" $ \a r b ->
-            case findNextCmp' a [42] [47] r b of
-                Right (MergeState a (42 :| []) (47 :| []) r _ _ _ b) -> True
-                _ -> False
-        , testProperty "lastMergeL" $ \(NonEmpty a) r b ->
-            case findNextCmp' a [42] [] [r] b of
-                Right (MergeState [] r f [] _ _ _ b) -> f === NE.reverse (42 :| a)
+        -- When there's something in both left and right, we expect no changes
+        -- to merge state, since everything is already ready for a comparison to
+        -- occur.
+        , testProperty "ready" $ \acc rest boring ->
+            case findNextCmp'' acc [42] [47] rest boring of
+                (Quick acck [l1k] [r1k] restk boringk
+                 , Right (MergeState {..}))
+                 -> acck === _acc
+                    .&. _left === (l1k:|[])
+                    .&. _right === (r1k:|[])
+                    .&. _rest === restk
+                    .&. _boring === boringk
+                _ -> property False
+        -- given an accumlator, 1 list in the rest, and the borings, when there is
+        -- one thing in left but nothing in right, we expect the new state to be:
+        -- acc: empty
+        -- left: the list in rest
+        -- right: the orig acc reversed ++ [the one thing in left]
+        -- rest: empty
+        -- boring: same as before
+        , testProperty "lastMergeL" $ \(NonEmpty acc) rest boring ->
+            case findNextCmp'' acc [42] [] [rest] boring of
+                ( Quick acck [l1k] [] [restk] boringk
+                  , Right (MergeState {..}))
+                    -> _acc === []
+                        .&. _left === restk
+                        .&. toList _right === reverse acck ++ [l1k]
+                        .&. _boring === boringk
                 x -> property False
-        , testProperty "lastMergeR" $ \(NonEmpty a) r b ->
-            case findNextCmp' a [] [42] [r] b of
-                Right (MergeState [] r f [] _ _ _ b) -> f === NE.reverse (42 :| a)
+        -- Similar to above, but there is nothing in left and one thing in
+        -- right. We expect the same result.
+        , testProperty "lastMergeR" $ \(NonEmpty acc) rest boring ->
+            case findNextCmp'' acc [] [42] [rest] boring of
+                ( Quick acck [] [r1k] [restk] boringk
+                  , Right (MergeState {..}))
+                    -> _acc === []
+                        .&. _left === restk
+                        .&. toList _right === reverse acck ++ [r1k]
+                        .&. _boring === boringk
                 x -> property False
         ])
     , testGroup
