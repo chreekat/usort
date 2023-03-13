@@ -9,9 +9,11 @@ import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import Compared
+
 stdoutCompare :: MergeState Text -> IO (Action Text)
-stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) _ _) = do
-    printPrompt (dspCnt, numElem, l, r)
+stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) mem _ _) = do
+    printPrompt (dspCnt, numElem, element l mem, element r mem)
     c <- getResponse
     case c of
         '1' -> pure $ Choose L
