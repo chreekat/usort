@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- | Remember comparisons.
-module Compared where
+module USort.Compared where
 
 import Control.Applicative
 import Data.Coerce

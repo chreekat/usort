@@ -52,7 +52,7 @@ Oh wait, we already have Data.List.transpose. Heh.
 Then we just need to find the indices that start elements.
 -}
 
-module SplitItems (splitItems, Items(..)) where
+module USort.SplitItems (splitItems, Items(..)) where
 
 import Data.List
 import Data.Char

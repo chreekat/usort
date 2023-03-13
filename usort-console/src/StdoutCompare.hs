@@ -9,7 +9,7 @@ import System.Console.Haskeline
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
-import Compared
+import USort.Compared
 
 stdoutCompare :: MergeState Text -> IO (Action Text)
 stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) mem _ _) = do

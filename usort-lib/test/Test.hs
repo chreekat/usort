@@ -24,8 +24,8 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import USort
-import SplitItems
-import Compared
+import USort.SplitItems
+import USort.Compared
 
 -- | Shrinks to 0s
 instance Arbitrary DisplayState where

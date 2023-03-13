@@ -28,7 +28,7 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
-import Compared
+import USort.Compared
 
 import Debug.Pretty.Simple
 

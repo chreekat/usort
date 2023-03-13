@@ -11,7 +11,7 @@ import Data.Text.IO
 import qualified Data.Text as T
 
 import USort
-import SplitItems
+import USort.SplitItems
 
 main :: (MergeState Text -> IO (Action Text)) -> IO ()
 main sortFn = do

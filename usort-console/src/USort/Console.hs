@@ -11,7 +11,7 @@ import Data.Text.IO
 import qualified Data.Text as T
 
 import USort
-import SplitItems
+import USort.SplitItems
 
 cliItems :: IO Items
 cliItems = do
