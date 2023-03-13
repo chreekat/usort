@@ -5,7 +5,7 @@ module USort.Compared where
 
 import Control.Applicative
 import Data.Coerce
-import Data.Foldable
+import Data.List
 import qualified Data.Map as Map
 
 -- | A class of invertible types.
@@ -43,8 +43,10 @@ observe a b res (Compared c) =
 newtype ElementMap a = ElementMap (Map.Map a a) deriving (Eq, Show, Semigroup, Monoid)
 
 -- | Given a list of things, keep them and their keys, forever.
-elementMap :: (Foldable f, Ord a) => f a -> ElementMap a
-elementMap = coerce . Map.fromList . fmap (\x -> (x,x)) . toList
+elementMap :: Traversable f => f a -> (f Int, ElementMap a)
+elementMap vals =
+    let ((elmap, _), keys) = mapAccumR (\(em, i) a -> ((insertEl i a em, succ i), succ i)) (mempty, 0) vals
+    in (keys, elmap)
 
 element :: Ord a => a -> ElementMap a -> a
 element a (ElementMap m) = m Map.! a
