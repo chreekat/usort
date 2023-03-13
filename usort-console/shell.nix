@@ -1,1 +1,2 @@
-(import ../. {}).usort-console.env
+{ ... }:
+(import ../nixpkgs.nix {}).myShell
