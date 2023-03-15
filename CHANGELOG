@@ -1,3 +1,8 @@
+* next
+
+    * Added 'boring' option
+    * Remember all comparisons to avoid repitition.
+
 * 0.4.1.0
 
     * New output format
