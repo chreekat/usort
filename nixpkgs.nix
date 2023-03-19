@@ -32,9 +32,9 @@ let
             {};
 
         usort-console =
-          self.callCabal2nix
+          h.dontHaddock (self.callCabal2nix
             "usort-console"
             (localSrc ./usort-console)
-            {};
+            {});
       };
 in pkgs
