@@ -41,7 +41,7 @@ instance Invertible Choice where
     invert R = L
 
 -- | Merge actions (things a user may do)
-data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo | Boring Choice | Nop
+data Action a = Choose Choice | Delete Choice | Edit Choice a | Undo | Quit | Boring Choice | Nop
     deriving (Eq, Show, Generic)
 
 -- | Data relevant for the UI, but not the merge itself.
@@ -148,6 +148,11 @@ processAct history st@(MergeState acc ls (r:|rs) rest dsp mem cmp b) (Boring R)
     = ActResult
         (st : history)
         (findNextCmp acc (toList ls) rs rest (predElem dsp) mem cmp (r:b))
+
+processAct history st@(MergeState acc ls rs rest dsp mem cmp b) Quit
+    = ActResult
+        (st : history)
+        (Left (fmap (\k -> element k mem) (reverse acc <> toList ls <> toList rs <> concatMap toList rest <> b)))
 
 processAct history st Nop = ActResult (st : history) (Right st)
 

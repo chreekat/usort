@@ -56,3 +56,5 @@ element a (ElementMap m) = m IntMap.! a
 
 insertEl :: Int -> a -> ElementMap a -> ElementMap a
 insertEl k v = coerce (IntMap.insert k v)
+
+elementMapSize (ElementMap m) = IntMap.size m

@@ -90,17 +90,20 @@ instance (Arbitrary a, Ord a, Eq a) => Arbitrary (TwoActions a) where
     shrink (TwoActions ms)
         = map TwoActions (filter (not . null . _rest) (shrink ms))
 
--- | An action that is not Undo.
-newtype NotUndo a = NotUndo (Action a)
+-- | An action that is not Undo or Quit
+newtype InBand a = InBand (Action a)
     deriving (Eq, Show)
 
-instance (Arbitrary a) => Arbitrary (NotUndo a) where
-    arbitrary = fmap NotUndo (arbitrary `suchThat` notUndo)
+-- | Quit and Undo are out-of-band operations
+inBand :: Action a -> Bool
+inBand Undo = False
+inBand Quit = False
+inBand _ = True
+
+instance (Arbitrary a) => Arbitrary (InBand a) where
+    arbitrary = fmap InBand (arbitrary `suchThat` inBand)
         where
-            -- Avoid Eq constraint
-            notUndo Undo = False
-            notUndo _ = True
-    shrink (NotUndo act) = map NotUndo (shrink act)
+    shrink (InBand act) = map InBand (filter inBand (shrink act))
 
 instance Arbitrary a => Arbitrary (NonEmpty a) where
     arbitrary = fmap (NE.fromList . getNonEmpty) arbitrary
@@ -115,6 +118,7 @@ instance Arbitrary a => Arbitrary (Action a) where
         , Edit <$> arbitrary <*> arbitrary
         , pure Undo
         , Boring <$> arbitrary
+        , pure Quit
         , pure Nop
         ]
     shrink x = shrinkToNop x ++ genericShrink x
@@ -198,6 +202,7 @@ tests = testGroup
         [ testProperty "undo"  propUndo
         , testProperty "editL" propEditL
         , testProperty "editR" propEditR
+        , testGroup "quit" quitTests
         ]
     , testGroup
         "sort"
@@ -354,8 +359,8 @@ tests = testGroup
         ]
     ]
 
-propCountChoose :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
-propCountChoose h (TwoActions st) (NotUndo act) =
+propCountChoose :: [MergeState ()] -> TwoActions () -> InBand () -> Property
+propCountChoose h (TwoActions st) (InBand act) =
     let ActResult _ (Right newState) = processAct h st act
         isChoice (Choose _) = True
         isChoice _ = False
@@ -363,8 +368,8 @@ propCountChoose h (TwoActions st) (NotUndo act) =
         Choose _ -> _display newState === succCnt (_display st)
         _ -> _display newState === _display st
 
-propUndo :: [MergeState Int] -> TwoActions Int -> NotUndo Int -> Property
-propUndo h (TwoActions st) (NotUndo act) =
+propUndo :: [MergeState ()] -> TwoActions () -> InBand () -> Property
+propUndo h (TwoActions st) (InBand act) =
     let ActResult newHist (Right newState) = processAct h st act
         ActResult h' (Right st') = processAct newHist newState Undo
     in (h, st) === (h', st')
@@ -378,4 +383,16 @@ propEditR h st@(MergeState _ _ (y:|_) _ _ _ _ _) x =
     let ActResult h' (Right st') = processAct h st (Edit R x)
     in property $ h' == (st:h) && element y (_memory st') == x
 
--- Ok i'm tired. Could use more tests of processAct, though.
+quitTests =
+    [ testProperty "mostly sorted stays mostly sorted" $
+        \(NonEmpty xs :: NonEmptyList (Large Int))
+         x
+         (Positive numL) ->
+            let lefts = replicate numL (Choose L)
+                s = mkState (x : xs) lefts
+                ActResult _ (Left res) = processAct [] s Quit
+             in not (x `elem` xs) ==> res === (x : xs)
+    , testProperty "preserves length" $ \(s :: MergeState ()) ->
+        let ActResult _ (Left res) = processAct [] s Quit
+            in length res === elementMapSize (_memory s)
+    ]
