@@ -49,16 +49,22 @@ listOf2 g = do
 fromRight (Right x) = x
 fromRight _ = error "fromRight: not Right lol"
 
+mkState :: Ord a => [a] -> [Action a] -> MergeState a
+mkState vals acts =
+    let initState = fromRight (firstCmp vals)
+        f choice state0 = case processAct [] state0 choice of
+            ActResult _ (Right state) -> state
+            -- discard excess actions
+            ActResult _ (Left _) -> state0
+    in foldr f initState acts
+
 -- | Size parameter is taken to mean "order of the number of elements left to be
 -- sorted"
 instance (Arbitrary a, Eq a, Ord a) => Arbitrary (MergeState a) where
     arbitrary = do
-        initState <- fromRight . firstCmp <$> listOf2 arbitrary
+        vals <- listOf2 arbitrary
         choices <- fmap Choose <$> scale (\n -> let n' = fromIntegral n in max 0 (round (log n' * n'))) (listOf arbitrary)
-        pure $ foldr (\choice state0 -> case processAct [] state0 choice of
-            ActResult _ (Right state) -> state
-            -- discard excess actions
-            ActResult _ (Left _) -> state0) initState choices
+        pure $ mkState vals choices
 
     shrink x = shrinkToEmpty x ++ genericShrink x
       where
@@ -330,7 +336,7 @@ tests = testGroup
                 )
                 step5
     {-
-     - Bad test. I added 'boring' and the property in qusetion changed.
+     - Bad test. I added 'boring' and the property in question changed.
 
     , testGroup
         "counts comparisons correctly"
