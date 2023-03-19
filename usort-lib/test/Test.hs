@@ -353,9 +353,20 @@ tests = testGroup
 
     , testGroup
         "Compared"
-        [ testProperty "observe idempotent" $ \(i :: Int) j (o :: Choice) c -> i /= j ==> (let new = observe i j o c in recompare i j new === Just o)
-        , testProperty "inverted observe idempotent" $ \(i :: Int) j (o :: Choice) c -> i /= j ==> (let new = observe i j o c in recompare j i new === Just (invert o))
-        , testProperty "order matters" $ \(i :: Int) j (o :: Choice) -> i /= j ==> recompare j i (observe i j o mempty) === Just (invert o)
+        -- Uses one Large to ensure fewer discards.
+        [ testProperty "observe idempotent" $
+            \(i :: Int) (Large j) (o :: Choice) c ->
+                i /= j ==>
+                    (let new = observe i j o c in recompare i j new === Just o)
+        , testProperty "inverted observe idempotent" $
+            \(i :: Int) (Large j) (o :: Choice) c ->
+                i /= j ==>
+                    (let new = observe i j o c
+                      in recompare j i new === Just (invert o))
+        , testProperty "order matters" $
+            \(i :: Int) (Large j) (o :: Choice) ->
+                i /= j ==>
+                    recompare j i (observe i j o mempty) === Just (invert o)
         ]
     ]
 
