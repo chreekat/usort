@@ -22,6 +22,7 @@ stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) mem 
         'e' -> either (Edit L) (Edit R) <$> editItem (element l mem) (element r mem)
         'i' -> Boring <$> boringItem
         'u' -> pure Undo
+        'q' -> pure Quit
         _   -> unknownCommand (stdoutCompare m)
 
 getResponse :: IO Char
@@ -85,7 +86,8 @@ printPrompt (remaining, numElem, x, y) = do
         , "--   [e]dit an entry,"
         , "--   [u]ndo last comparison,"
         , "--   [d]elete an entry,"
-        , "--   [i]gnore an entry"
+        , "--   [i]gnore an entry,"
+        , "--   [q]uit and print out the partially-sorted list"
         ]
     T.putStr "-> "
   where
