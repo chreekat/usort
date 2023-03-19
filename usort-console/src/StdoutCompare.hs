@@ -19,7 +19,7 @@ stdoutCompare m@(MergeState _ (l:|_) (r:|_) _ (DisplayState dspCnt numElem) mem 
         '1' -> pure $ Choose L
         '2' -> pure $ Choose R
         'd' -> Delete <$> delItem
-        'e' -> either (Edit L) (Edit R) <$> editItem l r
+        'e' -> either (Edit L) (Edit R) <$> editItem (element l mem) (element r mem)
         'i' -> Boring <$> boringItem
         'u' -> pure Undo
         _   -> unknownCommand (stdoutCompare m)
