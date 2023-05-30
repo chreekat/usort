@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta http-equiv="refresh" content="1" />
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>USort</title>
@@ -16,15 +17,36 @@
     <div>Which item is more important?</div>
     <div class="tile is-ancestor">
       <div class="tile is-vertical is-parent">
-        <div class="tile is-child">
-          <div class="title">1</div>
-          <div>This is the first item.</div>
+        <div class="tile notification is-warning is-child">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-title">1</div>
+            </div>
+            <div class="card-content">
+              This is the first item.
+            </div>
+            <div class="card-footer">
+              <span class="card-footer-item">Bp</span>
+              <span class="card-footer-item">cf</span>
+              <span class="card-footer-item">az</span>
+            </div>
+          </div>
         </div>
-        <div class="tile is-child">
-          <div class="title">2</div>
-          <div>This is the second item.</div>
+        <div class="tile notification is-primary is-child">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-header-title">2</div>
+            </div>
+            <div class="card-content has-background-warning">
+              This is the second item.
+            </div>
+            <div class="card-footer">
+              <span class="card-footer-item">Bp</span>
+              <span class="card-footer-item">cf</span>
+              <span class="card-footer-item">az</span>
+            </div>
+          </div>
         </div>
-      </div>
     </div>
   </section>
   </body>
