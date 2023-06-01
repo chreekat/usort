@@ -9,43 +9,50 @@
   </head>
   <body>
 
-  <h1 class="title">
+  <h1 class="title is-1">
     USort!
   </h1>
 
   <section>
-    <div>Which item is more important?</div>
+    <h2 class="title is-5">Which item is more important?</h2>
     <div class="tile is-ancestor">
       <div class="tile is-vertical is-parent">
-        <div class="tile notification is-warning is-child">
+        <div class="tile is-child">
           <div class="card">
-            <div class="card-header">
+            <header class="is-clickable card-header">
               <div class="card-header-title">1</div>
-            </div>
+            </header>
             <div class="card-content">
               This is the first item.
             </div>
-            <div class="card-footer">
-              <span class="card-footer-item">Bp</span>
-              <span class="card-footer-item">cf</span>
-              <span class="card-footer-item">az</span>
-            </div>
+            <footer class="card-footer">
+              <span class="is-clickable card-footer-item">Edit</span>
+              <span class="is-clickable card-footer-item">Ignore</span>
+              <span class="is-clickable card-footer-item">Delete</span>
+            </footer>
           </div>
         </div>
-        <div class="tile notification is-primary is-child">
+        <div class="tile is-child">
           <div class="card">
             <div class="card-header">
               <div class="card-header-title">2</div>
             </div>
-            <div class="card-content has-background-warning">
+            <div class="card-content">
               This is the second item.
             </div>
             <div class="card-footer">
-              <span class="card-footer-item">Bp</span>
-              <span class="card-footer-item">cf</span>
-              <span class="card-footer-item">az</span>
+              <span class="is-clickable card-footer-item">Edit</span>
+              <span class="is-clickable card-footer-item">Ignore</span>
+              <span class="is-clickable card-footer-item">Delete</span>
             </div>
           </div>
+        </div>
+        <div class="tile is-child">
+          <button class="button">Pick 1</button>
+          <button class="button">Pick 2</button>
+          <button class="button">Undo</button>
+          <button class="button">Add new</button>
+          <button class="button">Stop sorting</button>
         </div>
     </div>
   </section>
