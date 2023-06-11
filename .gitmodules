@@ -1,0 +1,3 @@
+[submodule "usort-web/ghc"]
+	path = usort-web/ghc
+	url = git@gitlab.haskell.org:ghc/ghc
