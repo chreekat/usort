@@ -22,7 +22,7 @@ newtype Compared val res = Compared (Map.Map (val, val) res)
 -- | Check if two values have a comparison
 recompare :: (Ord val, Invertible res) => val -> val -> Compared val res -> Maybe res
 recompare a b (Compared c) =
-    (Map.lookup (a, b) c) <|> (invert <$> Map.lookup (b, a) c)
+    Map.lookup (a, b) c <|> (invert <$> Map.lookup (b, a) c)
 
 -- | Observe a comparison. If the two values have already been compared, this
 -- replaces the old result.

@@ -152,7 +152,7 @@ processAct history st@(MergeState acc ls (r:|rs) rest dsp mem cmp b) (Boring R)
 processAct history st@(MergeState acc ls rs rest dsp mem cmp b) Quit
     = ActResult
         (st : history)
-        (Left (fmap (\k -> element k mem) (reverse acc <> toList ls <> toList rs <> concatMap toList rest <> b)))
+        (Left (fmap (`element` mem) (reverse acc <> toList ls <> toList rs <> concatMap toList rest <> b)))
 
 processAct history st Nop = ActResult (st : history) (Right st)
 
@@ -175,7 +175,7 @@ findNextCmp w x y z d mem cmp b = fix f w x y z
     -- finish populating workspace
     f _ [] (l:ls) [] (q:rest) = Right (MergeState [] (l:|ls) q rest d mem cmp b)
     -- the final merge
-    f _ acc [] [] [] = Left (fmap (flip element mem) (reverse (b ++ acc)))
+    f _ acc [] [] [] = Left (fmap (`element` mem) (reverse (b ++ acc)))
     -- clean out remaining in left
     f nxt acc l@(_:_) [] rest = nxt (reverse l ++ acc) [] [] rest
     -- clean out remaining in right
