@@ -30,7 +30,7 @@ import qualified Data.Set as Set
 
 import USort.Compared
 
-import Debug.Pretty.Simple
+-- import Debug.Pretty.Simple
 
 -- | Decisions, decisions.
 data Choice = L | R
@@ -218,12 +218,14 @@ usort
 usort = usort' id
 
 -- | Debug-enabled usort
+{-
 dsort
     :: (Monad m, Ord a, Show a)
     => (MergeState a -> m (Action a)) -- ^ Produces an Action
     -> [a] -- ^ Input list
     -> m [a]
 dsort = usort' pTraceShowId
+-}
 
 -- | Compares with '(<=)'
 realCompare :: (Applicative f, Ord a) => MergeState a -> f (Action a)
