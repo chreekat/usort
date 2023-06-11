@@ -16,6 +16,7 @@ let
 
       myShell = self.myHaskellPackages.shellFor {
         packages = pkgs: [ pkgs.usort-lib pkgs.usort-console ];
+        buildInputs = [ pkgs.cabal-install pkgs.haskell-language-server ];
       };
     };
 
