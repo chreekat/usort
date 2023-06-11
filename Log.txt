@@ -1,0 +1,71 @@
+########
+# Week 1
+########
+
+2023-04-29
+----------
+
+18:21:
+       Currently working on the web app.
+
+       Using bulma to create some templates.
+
+       Have managed to build usort-lib with ghc-js.
+
+       Things to do next:
+
+       - Write the other templates
+       - Write the controller
+           - Connect the DOM API to usort-lib somehow
+
+       I'll just write the templates first so it's done.
+
+########
+# Week 2
+########
+
+2023-06-03
+----------
+
+16:21:
+       I'd like to talk about what I need to do next.
+
+       I have a couple templates now -- enough to know I can definitely use Bulma and make
+       something that is usable. I still need to decide how to wire up the data to the
+       view. And I need to decide how to change the view. I guess I need the internet for
+       that. The question is do I want to write my own for fun, or do I just use something
+       off the shelf? And if I go off the shelf, do I go javascript native or Haskell
+       native? Is there a js-native option that I can hook up to a frp? Or are there
+       js-native options that are close enough to frp to make it unnecessary? Once again I
+       find myself needing to write a js web app...
+
+########
+# Week 3
+########
+
+2023-06-10
+----------
+
+15:08:
+       To compile to javascript:
+
+       (Build ghc-js)
+              emconfigure ./configure --target=javascript-unknown-ghcjs
+
+       cd usort-web/ghc; nix-shell
+       cabal build \
+              -w $PWD/usort-web/ghc/_build/stage1/bin/javascript-unknown-ghcjs-ghc usort-lib \
+              --with-hc-pkg $PWD/usort-web/ghc/_build/stage1/bin/javascript-unknown-ghcjs-ghc-pkg \
+              --allow-newer
+
+19:45:
+       Spent time trying to install pretty-simple, which petered out when Cabal tried to
+       build Setup for javascript, but pretty-simple uses defaultMainWithDoctest, which
+       uses runProcessInteractive, which doesn't exist.
+
+2023-06-11
+----------
+
+09:10:
+       Now I understand that I need to write an executable that "exports" functions
+       through the JS api. That's what I'll do next. Then I'll try to make a demo.
