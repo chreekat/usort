@@ -1,0 +1,1 @@
+../../../dist-newstyle/build/javascript-ghcjs/ghc-9.7.20230421/usort-web-0.1.0.0/x/usort-web/build/usort-web/usort-web.jsexe/all.js
