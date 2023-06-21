@@ -1,4 +1,4 @@
-cabal-version:       2.4
+cabal-version:       3.4
 
 name:                usort-web
 version:             0.1.0.0
@@ -13,20 +13,31 @@ maintainer:          b@chreekat.net
 -- category:
 extra-source-files:  CHANGELOG.md
 
-executable client
+common js
+  ghc-options: -ddisable-js-minifier
+
+library
+  import: js
+  hs-source-dirs: hs-src
+
+  exposed-modules: USort.Web
+  js-sources: blop.js
+  build-depends:
+    , base ^>=4.12.0.0
+    , usort-lib
+    , text ^>= 2.0.2
+  hs-source-dirs:
+    hs-src
+  default-language:    Haskell2010
+
+executable usort-web
+  import: js
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
   build-depends:
-    , base ^>=4.12.0.0
-    , miso
-    , servant ^>= 0.15
-    , text ^>= 1.2
-    , usort-lib
-  if !impl(ghcjs)
-    build-depends:
-      jsaddle, jsaddle-warp, transformers, warp, websockets
+    , base
+    , usort-web
   hs-source-dirs:
-    client,
-    shared
+    hs-app
   default-language:    Haskell2010
