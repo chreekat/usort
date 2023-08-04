@@ -69,3 +69,25 @@
 09:10:
        Now I understand that I need to write an executable that "exports" functions
        through the JS api. That's what I'll do next. Then I'll try to make a demo.
+
+########
+# Week 4
+########
+
+2023-08-04
+----------
+
+16:05:
+       I keep losing track of what I was working on, so let's look and document a bit.
+
+       I can build usort-lib and usort-web, but I can't run it yet because there are
+       problems with text when compiled with ghc2js. I assume other people are working on
+       those problems? I actually don't know. Also I don't think I am set up with a clear
+       way to run `cabal test` and have it test the pure code version of things. Can we
+       add that under a feature flag and start using it? Also, has anything else changed
+       to the text library yet?
+
+       Indeed. The next thing to do is add a pure-haskell flag to the cabal description,
+       add an issue to the upstream repo about pure-haskell implementation for javascript,
+       find and link to any relevant discussion in that issue, and then start implementing
+       things purely.
