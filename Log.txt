@@ -91,3 +91,12 @@
        add an issue to the upstream repo about pure-haskell implementation for javascript,
        find and link to any relevant discussion in that issue, and then start implementing
        things purely.
+
+2023-08-06
+----------
+
+22:10:
+       Ok, I actually found where I am. It's github:chreekat/text/b/more-js. What I'm
+       trying to do right now is demonstrate the general strategy for adding pure Haskell
+       versions of functions. I have started with reverse. Once I have reverse working, I
+       want to create a draft PR to see if people think it's the right path.
