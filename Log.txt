@@ -127,3 +127,13 @@
 09:53:
        I haven't written any code, but a combination of GPT and Wikipedia has allowed me
        to understand what measure_off_naive is doing, which is definitely progress.
+
+2023-08-16
+----------
+
+08:35:
+       I spent time yesterday trying to write reverse. Right now the two options appear to
+       be (1) using the IsList instance to get a list of Word8 or (2) using a bunch of
+       primops from GHC.Exts such as indexWord64Array#, assuming the latter are
+       implemented. I should probably just start with showing that the PURE_HASKELL macro
+       and the use-cbits flag actually work.
