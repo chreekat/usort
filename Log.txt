@@ -137,3 +137,13 @@
        primops from GHC.Exts such as indexWord64Array#, assuming the latter are
        implemented. I should probably just start with showing that the PURE_HASKELL macro
        and the use-cbits flag actually work.
+
+########
+# Week 7
+########
+
+2023-08-25
+----------
+
+09:47:
+       phadej suggesting looking at if arch(javascript) and simdutf stuff.
