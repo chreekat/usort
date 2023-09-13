@@ -155,3 +155,44 @@
        Done and done! Implemented reverse. Next, need to pose the question: merge the
        existing stuff as-is? (After editing the docs for the pure-haskell flag to indicate
        that it is not complete yet.)
+
+########
+# Week 8
+########
+
+2023-09-07
+----------
+
+20:14:
+       Today I want to try running perf tests.
+
+########
+# Week 9
+########
+
+2023-09-13
+----------
+
+20:06:
+       I have run tests and benchmarks. The PR is failing tests though.
+
+       .PHONY: all bench pure pure-bench fast.baseline
+
+       all:
+              cabal test -j
+
+       bench:
+              cabal -j bench --benchmark-options="-p /reverse/"
+
+       pure:
+              cabal --builddir=dist-pure -fpure-haskell -j test
+
+       pure-bench:
+              cabal --builddir=dist-pure -fpure-haskell -j bench --benchmark-options="-p /reverse/ --baseline fast.baseline"
+
+       fast.baseline:
+              cabal -j bench --benchmark-options="-p /reverse/ --csv fast.baseline"
+
+20:38:
+       Trying to get doctests to pass. Will download and build cabal-extras directly, dang
+       it.
