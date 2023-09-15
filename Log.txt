@@ -196,3 +196,10 @@
 20:38:
        Trying to get doctests to pass. Will download and build cabal-extras directly, dang
        it.
+
+2023-09-15
+----------
+
+23:05:
+       Just noting that the next thing to do is take a benchmark and then try Sylvain's
+       implementation stuff.
