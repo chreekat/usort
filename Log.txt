@@ -203,3 +203,19 @@
 23:05:
        Just noting that the next thing to do is take a benchmark and then try Sylvain's
        implementation stuff.
+
+#########
+# Week 10
+#########
+
+2023-09-21
+----------
+
+20:30:
+       Just gonna try the bangs to see if anything changes.
+
+       I did build cabal-extras btw, but now actually building cabal-docspec in
+       ~/src/haskell/cabal-extras.
+
+20:45:
+       Adding bangs didn't seem to help much.
